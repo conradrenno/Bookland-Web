@@ -1,0 +1,35 @@
+"use client";
+
+import { useEffect, useState } from "react";
+
+import { cn } from "@/lib/utils";
+
+/**
+ * Sticky frame for the header, with a hairline shadow once the page moves.
+ *
+ * Client-side only because it reacts to scroll; the header's actual content
+ * stays a Server Component and is passed straight through as children, so
+ * nothing else in it ships to the browser.
+ */
+export function HeaderShell({ children }: { children: React.ReactNode }) {
+  const [scrolled, setScrolled] = useState(false);
+
+  useEffect(() => {
+    const onScroll = () => setScrolled(window.scrollY > 4);
+    // Read once on mount: a reload halfway down the page starts scrolled.
+    onScroll();
+    window.addEventListener("scroll", onScroll, { passive: true });
+    return () => window.removeEventListener("scroll", onScroll);
+  }, []);
+
+  return (
+    <header
+      className={cn(
+        "sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm transition-shadow",
+        scrolled && "shadow-sm",
+      )}
+    >
+      {children}
+    </header>
+  );
+}
