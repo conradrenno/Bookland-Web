@@ -113,8 +113,10 @@
    * 16:1 against its foreground. */
   --ink: #17110d;
   --ink-foreground: #efe5d9;
-  /* Writing surface of an input. White here, by the owner's call: against the
-   * dark chrome it reads unmistakably as "type in me". */
+  /* Interactive surface: an input's writing area, and the panels that group
+   * controls (the catalogue filter bar). White here, by the owner's call.
+   * Text on it stays `--foreground` / `--muted-foreground`, measured at 15.7:1
+   * and 6.4:1 — nothing on this surface needs its own colour. */
   --field: #ffffff;
 
   /* Brand extra + semantic states */

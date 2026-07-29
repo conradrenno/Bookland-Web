@@ -49,7 +49,12 @@ export function CatalogFilters({ categories }: CatalogFiltersProps) {
   }
 
   return (
-    <div className="flex flex-col gap-4 rounded-lg border border-border bg-card/60 p-4 sm:flex-row sm:flex-wrap sm:items-end">
+    // White panel on the cream page. Those two are only 1.08:1 apart, so colour
+    // alone would barely register — the soft shadow is what makes it read as a
+    // separate surface rather than a slightly paler patch of page.
+    // `bg-field` is the same token the search input uses: one white that both
+    // themes already know how to invert.
+    <div className="flex flex-col gap-4 rounded-lg border border-border bg-field p-4 shadow-sm sm:flex-row sm:flex-wrap sm:items-end">
       <div className="flex flex-col gap-1.5">
         <Label htmlFor="filter-category" className="text-xs text-muted-foreground">
           Categoria
