@@ -126,24 +126,32 @@ Fase 2: wishlist, área de conta, painel admin.
 - [x] **Etapa 3 (2026-07-28):** páginas `/login` e `/register` — RHF + zod,
       `?next=` sanitizado, erro do BFF mapeado por `code`. **123 testes verdes**
       (105 node + 18 jsdom). → [`16-auth-pages.md`](docs/specs/16-auth-pages.md)
-- [ ] **Etapa 4 — próxima:** catálogo (`/` = listagem + busca/filtros, detalhe do
-      livro), e com ele o `SiteHeader`/`SiteFooter` (specs 13 e 14)
+- [x] **Etapa 4a (2026-07-29):** camada de dados do catálogo — `books.ts`
+      (+ `parseBookSearchParams`), `categories.ts`, `covers.ts`, `uuid.ts`,
+      `format.ts`, `remotePatterns` corrigido. **201 unit + 14 smoke verdes.**
+- [ ] **Etapa 4b — próxima:** UI do catálogo — `/` (listagem + busca + filtros +
+      paginação), `BookCard`, detalhe do livro, e o `SiteHeader`/`SiteFooter`
+      (specs 13 e 14)
 - [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
       (`stockQuantity` primitivo). Cosmético: itens 16 e 20
 
-## 🚦 Onde paramos — leia isto primeiro (2026-07-28)
+## 🚦 Onde paramos — leia isto primeiro (2026-07-29)
 
-**Etapas 1, 2 e 3 estão feitas, testadas e verificadas.** Comandos:
-`pnpm test:run` (**123** unit), `pnpm test:smoke` (5 contra o Spring **no ar**),
-`pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
+**Etapas 1, 2, 3 e 4a estão feitas, testadas e verificadas.** Comandos:
+`pnpm test:run` (**201** unit), `pnpm test:smoke` (**14** contra o Spring **no
+ar**), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
 O fluxo de auth está **fechado ponta a ponta**: middleware → `/login` → cookies.
+A camada de dados do catálogo está pronta; **falta a UI** (`/` ainda é o template
+do create-next-app).
 
 ### O que existe em código
 
 ```
+lib/         config.ts · utils.ts · format.ts (preço/data/nota pt-BR)
 lib/api/     client.ts (apiFetch) · url.ts · errors.ts · problem.ts
-             error-codes.ts · error-messages.ts · types.ts
+             error-codes.ts · error-messages.ts · types.ts · uuid.ts
              auth.ts (server→Spring) · auth-client.ts (browser→BFF)
+             books.ts · categories.ts · covers.ts
 lib/auth/    session.ts · cookies.ts · refresh.ts · protected-routes.ts
              server.ts · next-path.ts
 lib/forms/   apply-api-error.ts
@@ -176,24 +184,28 @@ O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
    um parâmetro repetido chega como **array** (recusado inteiro). Ver
    [`16-auth-pages.md`](docs/specs/16-auth-pages.md).
 
+5. **Parâmetro de URL inválido some, não vira erro.** `parseBookSearchParams`
+   descarta `?category=lixo` / `?minPrice=abc` (que o upstream responde com 400)
+   e limita `?size` a `MAX_PAGE_SIZE` (o upstream obedece `?size=1000`). Um typo
+   na barra de endereço tem que mostrar o catálogo, não uma tela de erro.
+   Ver [`09-contract-notes.md`](docs/specs/09-contract-notes.md) item 25.
+
 ### Próximo passo natural
-O **catálogo**: `/` (listagem + busca + filtros por categoria), detalhe do livro
-e, junto, o `SiteHeader`/`SiteFooter`. As specs são a
+A **UI do catálogo** (Etapa 4b): `/` (listagem + busca + filtros + paginação),
+`BookCard`, detalhe do livro e o `SiteHeader`/`SiteFooter`. As specs são a
 [03](docs/specs/03-catalog.md), [07](docs/specs/07-ui-design.md),
 [11](docs/specs/11-style-brief.md), [13](docs/specs/13-common_header.md) e
-[14](docs/specs/14-footer.md). Falta o módulo `lib/api/books.ts` +
-`categories.ts` — nada de UI de catálogo depende de decisão pendente.
+[14](docs/specs/14-footer.md). A camada de dados já está pronta e testada —
+nada de UI de catálogo depende de decisão pendente.
+
+Decidido com o dono (2026-07-29): o **contador do carrinho no header fica para a
+Etapa 5**, junto com `lib/api/cart.ts`. Por ora o header leva só o ícone,
+linkando `/cart` (deslogado → `/login?next=/cart`).
 
 ⚠️ **Aviso do build (não urgente):** o Next 16 marca `middleware.ts` como
 convenção **deprecada** em favor de `proxy.ts`. Só um rename + ajuste de
 assinatura, mas mexe no núcleo da renovação de token — fazer isoladamente, não
 no meio da etapa do catálogo.
-
-⚠️ **Antes de renderizar catálogo:** `next.config.ts` só tem `localhost:8080` em
-`images.remotePatterns`, mas os livros semeados usam `covers.openlibrary.org` —
-o `next/image` derruba a página. E `coverImageUrl` pode vir **relativa**
-(`/media/covers/...` no upload) ou absoluta (seed), então precisa de
-normalizador. Ambos descritos em [`03-catalog.md`](docs/specs/03-catalog.md).
 
 ## Decisões fixadas (2026-07-24)
 

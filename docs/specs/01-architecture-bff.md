@@ -27,6 +27,7 @@ src/
   lib/
     config.ts              # env, nomes de cookie, base URL           [feito]
     utils.ts               # cn() do shadcn                            [feito]
+    format.ts              # preço/data/nota em pt-BR                  [feito]
     api/
       types.ts             # DTOs espelhando o OpenAPI                 [feito]
       problem.ts           # RFC 7807: tipos + type guards             [feito]
@@ -34,9 +35,11 @@ src/
       errors.ts            # ApiError (erro único do BFF)              [feito]
       url.ts               # buildUrl/query (puro)                     [feito]
       client.ts            # apiFetch (query, erro, 204, timeout)      [feito]
-      auth.ts              # cookies httpOnly, refresh/rotação         [pend.]
-      books.ts             # catálogo (search, byId, aggregate)        [pend.]
-      categories.ts        # categorias                                [pend.]
+      auth.ts              # endpoints de auth sobre apiFetch          [feito]
+      books.ts             # catálogo: search, byId, parse de query     [feito]
+      categories.ts        # categorias                                [feito]
+      covers.ts            # normaliza coverImageUrl (rel. × abs.)     [feito]
+      uuid.ts              # isUuid — valida id vindo da URL           [feito]
       reviews.ts           # ler/criar reviews                         [pend.]
       cart.ts              # carrinho                                  [pend.]
       orders.ts            # pedidos                                   [pend.]

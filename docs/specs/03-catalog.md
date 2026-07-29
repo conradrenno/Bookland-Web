@@ -18,12 +18,39 @@ Query params (contrato):
 | `page` | int | default 0 |
 | `size` | int | default 20 |
 
+### ✅ `parseBookSearchParams` — a URL não vai crua para o upstream (2026-07-29)
+
+Os parâmetros acima nascem da **barra de endereço**, então chegam editáveis à
+mão. Medido ao vivo (detalhe no item 25 da
+[09-contract-notes.md](09-contract-notes.md)): `?category=not-a-uuid` e
+`?minPrice=abc` devolvem **400**, `?size=1000` é obedecido ao pé da letra, e um
+`sort` desconhecido é **ignorado em silêncio** (200 em ordem de título).
+
+`parseBookSearchParams(searchParams)` em [`lib/api/books.ts`](../../src/lib/api/books.ts)
+absorve isso antes da chamada:
+
+- filtro inválido (uuid malformado, preço não-numérico ou negativo) → **descartado**,
+  não repassado — um typo na URL mostra o catálogo, não uma tela de erro;
+- `size` limitado a `MAX_PAGE_SIZE` (60); `page` inteiro ≥ 0;
+- `sort` restrito a `title | price | rating` (decisão de produto — o contrato
+  aceita string livre), sempre resolvido, para a UI marcar o filtro ativo;
+- **parâmetro repetido** (`?sort=price&sort=rating`) chega como array e é
+  **recusado inteiro**, mesma regra do `?next=` em [16](16-auth-pages.md).
+
+`page` é **zero-based**, igual ao contrato e ao `PageResult.page`.
+
 Regras (story):
 - Resultado paginado com `totalElements` / `totalPages` (já vem no `PageResult`).
 - Ordenação por preço, título ou avaliação média.
+  ⚠️ `sort=price` verificado ao vivo (ordem crescente). `sort=rating` **não foi
+  possível verificar**: todo o catálogo semeado está com `avgRating: 0`, então a
+  ordem resultante é indistinguível da default. Reconferir quando houver reviews.
 - Livros com estoque zero **aparecem marcados** como indisponível (campo
   `available` do `BookViewModel`), não somem da lista. Confirmar comportamento
   real do backend p/ `available` vs `stockQuantity`.
+- **`avgRating: 0.0` = "sem avaliações"**, não "zero estrelas" (reviews são 1..5).
+  `formatRating()` devolve `null` nesse caso — a UI mostra "Sem avaliações", nunca
+  cinco estrelas vazias como se fosse nota.
 
 UI:
 - `SearchBar` (client) atualiza a query string; a página re-renderiza no server.
@@ -73,12 +100,9 @@ Campo adicionado ao `BookViewModel` (e a `Create/UpdateBookRequest`) —
   usar um **placeholder** (ex.: capa neutra com o título) — nunca `img` quebrada.
 - **Aspect ratio** consistente de capa (ex.: `2 / 3`), `object-cover`, com
   `sizes` adequado para o grid; `alt` = `título`.
-- O host da URL precisa estar em `next.config.ts › images.remotePatterns`
-  (hoje: `localhost:8080`; ajustar para o host real de produção).
-  🔴 **Furo atual:** os livros semeados usam `https://covers.openlibrary.org/...`,
-  que **não está** em `remotePatterns` — `next/image` derruba a página com
-  "hostname not configured". Adicionar `covers.openlibrary.org` (dev) antes de
-  renderizar o catálogo.
+- O host da URL precisa estar em `next.config.ts › images.remotePatterns`.
+  ✅ **Resolvido (2026-07-29):** `covers.openlibrary.org` (catálogo semeado) e
+  `localhost:8080` (uploads) estão declarados. Falta só o host real de produção.
 - **Upload da capa (admin, fase 2):** `POST /api/v1/books/{bookId}/cover`
   (`multipart/form-data`, campo `file`). Não faz parte do storefront MVP.
 
@@ -92,16 +116,21 @@ O campo não é sempre uma URL absoluta. Depende da origem:
 | Cadastro manual / seed | URL absoluta | `https://covers.openlibrary.org/…` |
 
 O `LocalImageStorageAdapter` grava `/media/covers/{uuid}.ext` e o Spring serve
-esse prefixo como recurso estático. Então o front precisa de um **normalizador**:
+esse prefixo como recurso estático. Sem normalizar, capas enviadas por upload
+quebram — `/media/...` resolveria contra o host do Next, não o do Spring.
 
-```ts
-// começa com http(s) → usa como está; senão → prefixa com a base da API
-const coverSrc = (u?: string) =>
-  !u ? null : /^https?:\/\//.test(u) ? u : `${API_PUBLIC_BASE}${u}`;
-```
+✅ **Implementado (2026-07-29):** `resolveCoverUrl()` em
+[`lib/api/covers.ts`](../../src/lib/api/covers.ts). Absoluta `http(s)` → usa como
+está; qualquer outra coisa → prefixa com **`MEDIA_BASE_URL`**; vazio → `null`
+(sinal para a UI desenhar o placeholder, nunca imagem quebrada).
 
-Sem isso, capas enviadas por upload quebram (`/media/...` resolveria contra o
-host do Next, não o do Spring).
+- **`MEDIA_BASE_URL` é separado de `API_BASE_URL`** (`lib/config.ts`) porque este
+  vai **renderizado no HTML** — precisa ser um endereço que o otimizador de
+  imagem do Next alcance, não o endereço interno que o BFF chama. Em dev
+  coincidem; em produção, definir `NEXT_PUBLIC_BOOKLAND_MEDIA_URL`.
+- Só `http`/`https` contam como absoluta, de propósito: um valor
+  protocol-relative (`//outro.host/x.jpg`) ou um `javascript:` digitado no
+  cadastro admin cai no ramo relativo e acaba **preso à nossa origem**.
 
 ### Limite de 255 chars — por que não é um problema
 

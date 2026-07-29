@@ -203,6 +203,7 @@ Também tipado no OpenAPI: `ProblemDetail` e `ValidationProblemDetail` (via
 | `INVALID_PARAMETER` | 400 | path/query com tipo errado (**tem `errors`**) |
 | `MALFORMED_REQUEST` | 400 | corpo ausente ou JSON inválido |
 | `BOOK_NOT_FOUND` | 404 | recurso inexistente (padrão `<ENTIDADE>_NOT_FOUND`) |
+| `CATEGORY_NOT_FOUND` | 404 | `GET /categories/{id}/books` com id inexistente (ver item 25) |
 | `EMAIL_ALREADY_EXISTS` | 409 | cadastro com e-mail já usado → **erro inline no campo** |
 | `PURCHASE_REQUIRED` | 403 | avaliar livro sem pedido **DELIVERED** (ver [04-reviews.md](04-reviews.md)) |
 | `DUPLICATE_REVIEW` | 409 | segunda review do mesmo cliente no mesmo livro |
@@ -496,6 +497,40 @@ o seed do admin e (b) destravar o registro (item 21).
 > **Nota de modo dev:** o banco é descartável, então dados de teste criados
 > durante a verificação **não precisam de limpeza** — somem no próximo restart.
 > Isso libera testes mais agressivos (criar livros, promover pedidos, etc.).
+
+## 25. Parâmetros de `GET /books`: o que o upstream aceita calado — NOVO (2026-07-29)
+
+Levantado ao vivo antes de escrever `lib/api/books.ts`. Nada aqui é bug do
+backend — é o comportamento que a **camada de dados do BFF precisa absorver**,
+porque a origem dos parâmetros é a **URL do navegador**, editável à mão.
+
+| Entrada | Resposta do upstream | O que o BFF faz |
+|---|---|---|
+| `?sort=bogus` | **200**, ordem default (título) | descarta e usa `title` — não há erro a reportar |
+| `?category=not-a-uuid` | **400 `INVALID_PARAMETER`** + `errors.category` | **descarta o filtro** — senão um typo na URL vira página de erro |
+| `?minPrice=abc` | **400 `INVALID_PARAMETER`** + `errors.minPrice` | descarta |
+| `?size=1000` | **200**, devolve tudo | **limita a `MAX_PAGE_SIZE`** — não há teto upstream |
+| `?page=99` (fora do range) | **200**, `content: []` | passa direto: lista vazia é resposta correta |
+
+> Assimetria a lembrar: **tipo errado → 400; valor desconhecido → ignorado.**
+> Só o primeiro grupo derruba a página, e é o que `parseBookSearchParams` filtra.
+
+**Outros achados da mesma rodada:**
+
+1. **`CATEGORY_NOT_FOUND`** (404) — código novo, visto em
+   `GET /categories/{id}/books` com id inexistente. Adicionado ao `ErrorCodes`.
+2. **UUIDs semeados não são RFC-4122.** Ex.: `a1b2c3d4-e5f6-7890-abcd-ef1234567890`
+   (nibble de versão `7`, variante `a`) e `c3d4e5f6-a7b8-9012-cdef-123456789012`
+   (versão `9`). Uma regex estrita de versão/variante **rejeitaria o catálogo
+   real** — por isso `isUuid` valida só a forma 8-4-4-4-12 hex.
+3. **`avgRating` vem `0.0`, não ausente**, para livro sem review. Como review é
+   1..5, `0` significa "sem avaliação" — nunca "zero estrelas". `formatRating`
+   colapsa os dois casos em `null`.
+4. **`GET /categories/{id}/books` aceita só `page`/`size`** — sem `q`, `sort` ou
+   faixa de preço. Por isso a landing filtra por `searchBooks({ category })`, que
+   compõe com os demais filtros; a rota por categoria fica para listagem simples.
+5. **`GET /categories` devolve array cru**, não `PageResult` — única listagem não
+   paginada do contrato.
 
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review
