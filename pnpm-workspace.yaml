@@ -1,0 +1,14 @@
+allowBuilds:
+  esbuild: set this to true or false
+  msw: set this to true or false
+  sharp: set this to true or false
+  unrs-resolver: set this to true or false
+# sharp & unrs-resolver ship prebuilt platform binaries (already present under
+# node_modules/.pnpm), so their postinstall build scripts are not required.
+onlyBuiltDependencies:
+  - sharp
+  - unrs-resolver
+# Don't hard-fail the install just because those build scripts were skipped...
+strictDepBuilds: false
+# ...and don't re-run an implicit install gate before `pnpm dev` / `pnpm build`.
+verifyDepsBeforeRun: false
