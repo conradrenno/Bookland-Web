@@ -49,6 +49,8 @@
   --color-card-foreground: var(--card-foreground);
   --color-card: var(--card);
   /* Extra brand + semantic-state tokens (not in shadcn defaults). */
+  --color-surface: var(--surface);
+  --color-field: var(--field);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
   --color-success: var(--success);
@@ -94,6 +96,14 @@
   --border: #ddd0be;
   --input: #ddd0be;
   --ring: #a8492f;
+
+  /* Chrome (header/footer): a shade deeper than the page, like cloth binding
+   * around a page block. Subtle on purpose — the style brief asks for a quiet
+   * editorial look, so this is a step in tone, not a slab of colour. */
+  --surface: #f3ebe0;
+  /* Writing surface of an input. White here, by the owner's call: against the
+   * cream page it reads as "type in me" without needing a heavier border. */
+  --field: #ffffff;
 
   /* Brand extra + semantic states */
   --brand: #3f4b3b; /* olive green (owner's original "secondary") */
@@ -151,6 +161,11 @@
   --input: #3a2f26;
   --ring: #c9754f; /* lighter terracotta so focus is visible on dark */
 
+  /* Same idea inverted: on a dark page the chrome lifts instead of deepening,
+   * because a darker band would read as a hole rather than a frame. */
+  --surface: #221c16;
+  --field: #2b241d;
+
   --brand: #6e8163;
   --brand-foreground: #14100c;
   --success: #5e9268;
@@ -202,6 +217,9 @@
     --border: #3a2f26;
     --input: #3a2f26;
     --ring: #c9754f;
+
+    --surface: #221c16;
+    --field: #2b241d;
 
     --brand: #6e8163;
     --brand-foreground: #14100c;

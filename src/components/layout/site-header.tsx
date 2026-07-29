@@ -62,11 +62,14 @@ export async function SiteHeader() {
           {user ? (
             <AccountMenu user={user} />
           ) : (
-            <div className="hidden items-center gap-1 sm:flex">
+            // "Entrar" shows at every width: on a narrow screen the way in
+            // should not be hidden behind a menu the visitor has to discover.
+            // "Criar conta" needs the room, and stays in the mobile panel.
+            <div className="flex items-center gap-1">
               <Button variant="ghost" size="sm" render={<Link href="/login" />}>
                 Entrar
               </Button>
-              <Button size="sm" render={<Link href="/register" />}>
+              <Button size="sm" className="hidden sm:inline-flex" render={<Link href="/register" />}>
                 Criar conta
               </Button>
             </div>

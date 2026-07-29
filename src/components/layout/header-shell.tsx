@@ -25,7 +25,9 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
   return (
     <header
       className={cn(
-        "sticky top-0 z-40 border-b border-border bg-background/95 backdrop-blur-sm transition-shadow",
+        // `bg-surface` rather than `bg-background`: the chrome sits a shade off
+        // the page so the header reads as a frame around it, not as more page.
+        "sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur-sm transition-shadow",
         scrolled && "shadow-sm",
       )}
     >

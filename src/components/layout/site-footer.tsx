@@ -11,7 +11,8 @@ import { PaymentMarks } from "@/components/layout/payment-marks";
  */
 export function SiteFooter() {
   return (
-    <footer className="mt-16 border-t border-border bg-card/40">
+    // Same surface as the header, so the page sits between two matching bands.
+    <footer className="mt-16 border-t border-border bg-surface">
       <div className="mx-auto grid w-full max-w-6xl gap-10 px-4 py-12 sm:grid-cols-3">
         <section>
           <FooterHeading>Mapa do site</FooterHeading>
@@ -46,7 +47,8 @@ export function SiteFooter() {
         </section>
       </div>
 
-      <div className="border-t border-border bg-muted/40">
+      {/* One step deeper again, so the legal bar separates from the columns. */}
+      <div className="border-t border-border bg-muted/60">
         <div className="mx-auto flex w-full max-w-6xl flex-col gap-1 px-4 py-5 text-sm text-muted-foreground sm:flex-row sm:items-center sm:justify-between">
           <span className="font-serif text-foreground">Bookland</span>
           <span>© {new Date().getFullYear()} Todos os direitos reservados</span>
