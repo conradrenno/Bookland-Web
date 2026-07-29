@@ -1,6 +1,6 @@
 "use client";
 
-import { LogOut, User } from "lucide-react";
+import { ChevronDown, LogOut, User } from "lucide-react";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -8,6 +8,7 @@ import { toast } from "sonner";
 import {
   DropdownMenu,
   DropdownMenuContent,
+  DropdownMenuGroup,
   DropdownMenuItem,
   DropdownMenuLabel,
   DropdownMenuSeparator,
@@ -52,17 +53,32 @@ export function AccountMenu({ user }: { user: SessionUser }) {
 
   return (
     <DropdownMenu>
+      {/* `outline` plus a chevron so the control looks like something that
+          opens. As a bare ghost button it read as a label, and the only way out
+          of the session sat behind a click nobody had a reason to try. */}
       <DropdownMenuTrigger
-        render={<Button variant="ghost" size="sm" className="gap-1.5" aria-label="Sua conta" />}
+        render={
+          <Button
+            variant="outline"
+            size="sm"
+            className="h-9 gap-1.5"
+            aria-label={`Sua conta (${handle})`}
+          />
+        }
       >
         <User aria-hidden className="size-4" />
         <span className="hidden max-w-28 truncate sm:inline">{handle}</span>
+        <ChevronDown aria-hidden className="size-3.5 text-muted-foreground" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">
-        <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
-          {user.email}
-        </DropdownMenuLabel>
+        {/* The label has to sit inside a group: Base UI's GroupLabel reads a
+            context that only Menu.Group provides, and throws without it. */}
+        <DropdownMenuGroup>
+          <DropdownMenuLabel className="truncate font-normal text-muted-foreground">
+            {user.email}
+          </DropdownMenuLabel>
+        </DropdownMenuGroup>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onSignOut} disabled={signingOut}>
           <LogOut aria-hidden />
