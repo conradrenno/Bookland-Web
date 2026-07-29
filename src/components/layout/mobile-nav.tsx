@@ -5,6 +5,7 @@ import Link from "next/link";
 import { usePathname } from "next/navigation";
 import { useState } from "react";
 
+import { ON_SURFACE_GHOST } from "@/components/layout/on-surface";
 import { Button } from "@/components/ui/button";
 import type { CategoryViewModel } from "@/lib/api/types";
 
@@ -39,6 +40,7 @@ export function MobileNav({ categories, signedIn }: MobileNavProps) {
       <Button
         variant="ghost"
         size="icon"
+        className={ON_SURFACE_GHOST}
         aria-expanded={open}
         aria-controls="mobile-nav-panel"
         aria-label={open ? "Fechar menu" : "Abrir menu"}
@@ -50,7 +52,10 @@ export function MobileNav({ categories, signedIn }: MobileNavProps) {
       {open && (
         <div
           id="mobile-nav-panel"
-          className="absolute inset-x-0 top-full border-b border-border bg-background px-4 py-4 shadow-md"
+          // `text-foreground` is restated because the header sets light type for
+          // the wood bar, and this panel drops back onto the cream page colour —
+          // inheriting from above would leave cream text on cream.
+          className="absolute inset-x-0 top-full border-b border-border bg-background px-4 py-4 text-foreground shadow-md"
         >
           <nav className="flex flex-col gap-1">
             <MobileLink href="/categories">Todas as categorias</MobileLink>

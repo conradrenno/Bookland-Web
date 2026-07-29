@@ -23,7 +23,9 @@ export function PaymentMarks() {
         <li key={mark.label}>
           <span
             title={mark.label}
-            className="inline-flex h-8 min-w-14 items-center justify-center rounded-md border border-border bg-card px-2 text-[0.7rem] font-semibold tracking-wide text-muted-foreground"
+            // Translucent light rather than a cream chip: on the wood footer a
+            // solid pale block would read as a hole punched in the bar.
+            className="inline-flex h-8 min-w-14 items-center justify-center rounded-md border border-surface-foreground/25 bg-surface-foreground/10 px-2 text-[0.7rem] font-semibold tracking-wide text-surface-foreground/85"
           >
             {mark.text}
           </span>

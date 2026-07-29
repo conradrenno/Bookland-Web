@@ -34,7 +34,9 @@ export function CategoriesMenu({ categories }: { categories: CategoryViewModel[]
           render={
             <Link
               href="/categories"
-              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:text-primary aria-expanded:text-primary"
+              // Gold on hover, like the rest of the header: terracotta would be
+              // the same value as the wood behind it.
+              className="inline-flex items-center gap-1 rounded-md px-2 py-1.5 text-sm hover:text-accent aria-expanded:text-accent"
             />
           }
         >

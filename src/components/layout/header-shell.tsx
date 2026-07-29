@@ -25,9 +25,10 @@ export function HeaderShell({ children }: { children: React.ReactNode }) {
   return (
     <header
       className={cn(
-        // `bg-surface` rather than `bg-background`: the chrome sits a shade off
-        // the page so the header reads as a frame around it, not as more page.
-        "sticky top-0 z-40 border-b border-border bg-surface/95 backdrop-blur-sm transition-shadow",
+        // Dark wood, so `text-surface-foreground` is set once here and every
+        // child inherits light type. Anything inside that hard-codes
+        // `text-foreground` would go dark-on-dark and vanish.
+        "sticky top-0 z-40 border-b border-ink/25 bg-surface/95 text-surface-foreground backdrop-blur-sm transition-shadow",
         scrolled && "shadow-sm",
       )}
     >

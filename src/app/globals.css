@@ -50,6 +50,10 @@
   --color-card: var(--card);
   /* Extra brand + semantic-state tokens (not in shadcn defaults). */
   --color-surface: var(--surface);
+  --color-surface-foreground: var(--surface-foreground);
+  --color-surface-muted: var(--surface-muted);
+  --color-ink: var(--ink);
+  --color-ink-foreground: var(--ink-foreground);
   --color-field: var(--field);
   --color-brand: var(--brand);
   --color-brand-foreground: var(--brand-foreground);
@@ -97,12 +101,20 @@
   --input: #ddd0be;
   --ring: #a8492f;
 
-  /* Chrome (header/footer): a shade deeper than the page, like cloth binding
-   * around a page block. Subtle on purpose — the style brief asks for a quiet
-   * editorial look, so this is a step in tone, not a slab of colour. */
-  --surface: #f3ebe0;
+  /* Chrome (header/footer): dark wood around the cream page block, the way a
+   * bound book frames its paper. Dark enough that it carries *light* type —
+   * hence the two foregrounds below, which every element on the chrome must
+   * use instead of `--foreground`. Contrast against `--surface`: 6.8:1 for the
+   * main text, 4.7:1 for the muted one — both clear AA. */
+  --surface: #6f4c3a;
+  --surface-foreground: #f7efe6;
+  --surface-muted: #d8c6b6;
+  /* Bottom bar of the footer: the closing line of the page, nearly black.
+   * 16:1 against its foreground. */
+  --ink: #17110d;
+  --ink-foreground: #efe5d9;
   /* Writing surface of an input. White here, by the owner's call: against the
-   * cream page it reads as "type in me" without needing a heavier border. */
+   * dark chrome it reads unmistakably as "type in me". */
   --field: #ffffff;
 
   /* Brand extra + semantic states */
@@ -161,9 +173,14 @@
   --input: #3a2f26;
   --ring: #c9754f; /* lighter terracotta so focus is visible on dark */
 
-  /* Same idea inverted: on a dark page the chrome lifts instead of deepening,
-   * because a darker band would read as a hole rather than a frame. */
-  --surface: #221c16;
+  /* Same wood, one step down: on an already dark page the chrome only has to
+   * separate, not to darken. Foregrounds stay light in both themes — the
+   * chrome is dark either way, so it never flips. */
+  --surface: #4a3225;
+  --surface-foreground: #f0e6da;
+  --surface-muted: #c3b0a0;
+  --ink: #100c09;
+  --ink-foreground: #e6dccf;
   --field: #2b241d;
 
   --brand: #6e8163;
@@ -218,7 +235,11 @@
     --input: #3a2f26;
     --ring: #c9754f;
 
-    --surface: #221c16;
+    --surface: #4a3225;
+    --surface-foreground: #f0e6da;
+    --surface-muted: #c3b0a0;
+    --ink: #100c09;
+    --ink-foreground: #e6dccf;
     --field: #2b241d;
 
     --brand: #6e8163;

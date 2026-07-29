@@ -15,8 +15,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/dropdown-menu";
 import { Button } from "@/components/ui/button";
+import { ON_SURFACE_OUTLINE } from "@/components/layout/on-surface";
 import { signOut } from "@/lib/api/auth-client";
 import type { SessionUser } from "@/lib/auth/session";
+import { cn } from "@/lib/utils";
 
 /**
  * Signed-in menu: who you are, and how to leave.
@@ -61,14 +63,16 @@ export function AccountMenu({ user }: { user: SessionUser }) {
           <Button
             variant="outline"
             size="sm"
-            className="h-9 gap-1.5"
+            className={cn("h-9 gap-1.5", ON_SURFACE_OUTLINE)}
             aria-label={`Sua conta (${handle})`}
           />
         }
       >
         <User aria-hidden className="size-4" />
         <span className="hidden max-w-28 truncate sm:inline">{handle}</span>
-        <ChevronDown aria-hidden className="size-3.5 text-muted-foreground" />
+        {/* Dimmed against the light type, not against the page: this chevron
+            sits on the wood bar, where `muted-foreground` would disappear. */}
+        <ChevronDown aria-hidden className="size-3.5 text-surface-foreground/70" />
       </DropdownMenuTrigger>
 
       <DropdownMenuContent align="end" className="w-56">

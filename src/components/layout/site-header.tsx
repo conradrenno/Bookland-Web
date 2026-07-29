@@ -7,10 +7,12 @@ import { AccountMenu } from "@/components/layout/account-menu";
 import { CategoriesMenu } from "@/components/layout/categories-menu";
 import { HeaderShell } from "@/components/layout/header-shell";
 import { MobileNav } from "@/components/layout/mobile-nav";
+import { ON_SURFACE_GHOST, ON_SURFACE_PRIMARY } from "@/components/layout/on-surface";
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/lib/api/categories";
 import type { CategoryViewModel } from "@/lib/api/types";
 import { getCurrentUser } from "@/lib/auth/server";
+import { cn } from "@/lib/utils";
 
 /**
  * Header on every page (docs/specs/13-common_header.md).
@@ -26,7 +28,10 @@ export async function SiteHeader() {
       <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
         <MobileNav categories={categories} signedIn={user !== null} />
 
-        <Link href="/" className="font-serif text-xl tracking-tight hover:text-primary">
+        {/* Hovers go to `accent` (gold), not `primary` (terracotta): terracotta
+            on the wood surface is nearly the same value and the change would be
+            invisible. Gold is the one palette colour that lifts off it. */}
+        <Link href="/" className="font-serif text-xl tracking-tight hover:text-accent">
           Bookland
         </Link>
 
@@ -34,7 +39,7 @@ export async function SiteHeader() {
           <CategoriesMenu categories={categories} />
           <Link
             href="/?sort=rating"
-            className="rounded-md px-2 py-1.5 text-sm hover:text-primary"
+            className="rounded-md px-2 py-1.5 text-sm hover:text-accent"
           >
             Mais bem avaliados
           </Link>
@@ -51,6 +56,7 @@ export async function SiteHeader() {
             variant="ghost"
             size="icon"
             aria-label="Carrinho"
+            className={ON_SURFACE_GHOST}
             // Anonymous visitors are bounced to sign in and sent back, since the
             // cart endpoint requires a token. The item counter arrives with the
             // cart itself in stage 5 (decided with the owner, 2026-07-29).
@@ -66,10 +72,19 @@ export async function SiteHeader() {
             // should not be hidden behind a menu the visitor has to discover.
             // "Criar conta" needs the room, and stays in the mobile panel.
             <div className="flex items-center gap-1">
-              <Button variant="ghost" size="sm" render={<Link href="/login" />}>
+              <Button
+                variant="ghost"
+                size="sm"
+                className={ON_SURFACE_GHOST}
+                render={<Link href="/login" />}
+              >
                 Entrar
               </Button>
-              <Button size="sm" className="hidden sm:inline-flex" render={<Link href="/register" />}>
+              <Button
+                size="sm"
+                className={cn("hidden sm:inline-flex", ON_SURFACE_PRIMARY)}
+                render={<Link href="/register" />}
+              >
                 Criar conta
               </Button>
             </div>
