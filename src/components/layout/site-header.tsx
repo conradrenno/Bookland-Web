@@ -25,7 +25,10 @@ export async function SiteHeader() {
 
   return (
     <HeaderShell>
-      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-3">
+      {/* Height comes from the tallest child (the 40px search field) plus this
+          padding: 12px a side gave 64px, 20px gives 80px. The scale has no step
+          that lands on exactly +20%, and the nearer one is up. */}
+      <div className="mx-auto flex w-full max-w-6xl flex-wrap items-center gap-x-4 gap-y-3 px-4 py-5">
         <MobileNav categories={categories} signedIn={user !== null} />
 
         {/* Hovers go to `accent` (gold), not `primary` (terracotta): terracotta
