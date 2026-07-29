@@ -1,0 +1,245 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+@import "shadcn/tailwind.css";
+
+@custom-variant dark (&:is(.dark *));
+
+/* -------------------------------------------------------------------------
+ * Bookland design tokens. Values are the owner's brand palette (warm bookish:
+ * cream / brown / terracotta / olive / gold), translated from the v3-style
+ * config in docs/specs/12-config-tailwinds.md into Tailwind v4 + shadcn CSS
+ * variables. Light in :root, dark in .dark AND @media (prefers-color-scheme).
+ * ---------------------------------------------------------------------- */
+
+@theme inline {
+  --color-background: var(--background);
+  --color-foreground: var(--foreground);
+  --font-sans: var(--font-sans);
+  --font-serif: var(--font-serif);
+  --font-mono: ui-monospace, SFMono-Regular, Menlo, Consolas, monospace;
+  --font-heading: var(--font-serif);
+  --color-sidebar-ring: var(--sidebar-ring);
+  --color-sidebar-border: var(--sidebar-border);
+  --color-sidebar-accent-foreground: var(--sidebar-accent-foreground);
+  --color-sidebar-accent: var(--sidebar-accent);
+  --color-sidebar-primary-foreground: var(--sidebar-primary-foreground);
+  --color-sidebar-primary: var(--sidebar-primary);
+  --color-sidebar-foreground: var(--sidebar-foreground);
+  --color-sidebar: var(--sidebar);
+  --color-chart-5: var(--chart-5);
+  --color-chart-4: var(--chart-4);
+  --color-chart-3: var(--chart-3);
+  --color-chart-2: var(--chart-2);
+  --color-chart-1: var(--chart-1);
+  --color-ring: var(--ring);
+  --color-input: var(--input);
+  --color-border: var(--border);
+  --color-destructive: var(--destructive);
+  --color-destructive-foreground: var(--destructive-foreground);
+  --color-accent-foreground: var(--accent-foreground);
+  --color-accent: var(--accent);
+  --color-muted-foreground: var(--muted-foreground);
+  --color-muted: var(--muted);
+  --color-secondary-foreground: var(--secondary-foreground);
+  --color-secondary: var(--secondary);
+  --color-primary-foreground: var(--primary-foreground);
+  --color-primary: var(--primary);
+  --color-popover-foreground: var(--popover-foreground);
+  --color-popover: var(--popover);
+  --color-card-foreground: var(--card-foreground);
+  --color-card: var(--card);
+  /* Extra brand + semantic-state tokens (not in shadcn defaults). */
+  --color-brand: var(--brand);
+  --color-brand-foreground: var(--brand-foreground);
+  --color-success: var(--success);
+  --color-success-foreground: var(--success-foreground);
+  --color-warning: var(--warning);
+  --color-warning-foreground: var(--warning-foreground);
+  --color-info: var(--info);
+  --color-info-foreground: var(--info-foreground);
+  --radius-sm: calc(var(--radius) * 0.6);
+  --radius-md: calc(var(--radius) * 0.8);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) * 1.4);
+  --radius-2xl: calc(var(--radius) * 1.8);
+  --radius-3xl: calc(var(--radius) * 2.2);
+  --radius-4xl: calc(var(--radius) * 2.6);
+}
+
+/* ---- Light (default) ---------------------------------------------------- */
+:root {
+  color-scheme: light;
+  --radius: 0.5rem; /* owner's DEFAULT 8px; lg≈xl utilities ~12px */
+
+  --background: #faf6f1;
+  --foreground: #2b211b;
+  --card: #fffcf7;
+  --card-foreground: #2b211b;
+  --popover: #fffcf7;
+  --popover-foreground: #2b211b;
+
+  --primary: #a8492f; /* terracotta */
+  --primary-foreground: #faf6f1;
+  /* shadcn "secondary" = subtle neutral surface; olive lives in --brand. */
+  --secondary: #ede4d8;
+  --secondary-foreground: #3f4b3b;
+  --muted: #ede4d8;
+  --muted-foreground: #6b5d4f;
+  --accent: #c9a15a; /* gold */
+  --accent-foreground: #2b211b;
+
+  --destructive: #9b3b2e;
+  --destructive-foreground: #faf6f1;
+
+  --border: #ddd0be;
+  --input: #ddd0be;
+  --ring: #a8492f;
+
+  /* Brand extra + semantic states */
+  --brand: #3f4b3b; /* olive green (owner's original "secondary") */
+  --brand-foreground: #faf6f1;
+  --success: #3f6b4a;
+  --success-foreground: #faf6f1;
+  --warning: #9a6410;
+  --warning-foreground: #faf6f1;
+  --info: #3e5c6b;
+  --info-foreground: #faf6f1;
+
+  --chart-1: #a8492f;
+  --chart-2: #3f4b3b;
+  --chart-3: #c9a15a;
+  --chart-4: #6b5d4f;
+  --chart-5: #3e5c6b;
+
+  --sidebar: #f3ece1;
+  --sidebar-foreground: #2b211b;
+  --sidebar-primary: #a8492f;
+  --sidebar-primary-foreground: #faf6f1;
+  --sidebar-accent: #ede4d8;
+  --sidebar-accent-foreground: #2b211b;
+  --sidebar-border: #ddd0be;
+  --sidebar-ring: #a8492f;
+}
+
+/* ---- Dark palette (shared) --------------------------------------------- */
+/* Applied via the .dark class (future manual toggle) AND automatically when
+ * the OS prefers dark and no explicit .light override is set. Keep the two
+ * blocks below in sync. */
+.dark {
+  color-scheme: dark;
+
+  --background: #1c1712;
+  --foreground: #ede4d8;
+  --card: #241d17;
+  --card-foreground: #ede4d8;
+  --popover: #241d17;
+  --popover-foreground: #ede4d8;
+
+  --primary: #a8492f; /* kept dark enough for legible cream text (~5.7:1) */
+  --primary-foreground: #fdf7f0;
+  --secondary: #2e2822;
+  --secondary-foreground: #ede4d8;
+  --muted: #2a241e;
+  --muted-foreground: #b3a594;
+  --accent: #c9a15a;
+  --accent-foreground: #1c1712;
+
+  --destructive: #b0432f;
+  --destructive-foreground: #fdf7f0;
+
+  --border: #3a2f26;
+  --input: #3a2f26;
+  --ring: #c9754f; /* lighter terracotta so focus is visible on dark */
+
+  --brand: #6e8163;
+  --brand-foreground: #14100c;
+  --success: #5e9268;
+  --success-foreground: #10140f;
+  --warning: #c79a3f;
+  --warning-foreground: #1c1712;
+  --info: #6fa0b4;
+  --info-foreground: #10141a;
+
+  --chart-1: #c86a4c;
+  --chart-2: #6e8163;
+  --chart-3: #d8b36a;
+  --chart-4: #b3a594;
+  --chart-5: #6fa0b4;
+
+  --sidebar: #201a14;
+  --sidebar-foreground: #ede4d8;
+  --sidebar-primary: #c86a4c;
+  --sidebar-primary-foreground: #14100c;
+  --sidebar-accent: #2a241e;
+  --sidebar-accent-foreground: #ede4d8;
+  --sidebar-border: #3a2f26;
+  --sidebar-ring: #c9754f;
+}
+
+@media (prefers-color-scheme: dark) {
+  :root:not(.light) {
+    color-scheme: dark;
+
+    --background: #1c1712;
+    --foreground: #ede4d8;
+    --card: #241d17;
+    --card-foreground: #ede4d8;
+    --popover: #241d17;
+    --popover-foreground: #ede4d8;
+
+    --primary: #a8492f;
+    --primary-foreground: #fdf7f0;
+    --secondary: #2e2822;
+    --secondary-foreground: #ede4d8;
+    --muted: #2a241e;
+    --muted-foreground: #b3a594;
+    --accent: #c9a15a;
+    --accent-foreground: #1c1712;
+
+    --destructive: #b0432f;
+    --destructive-foreground: #fdf7f0;
+
+    --border: #3a2f26;
+    --input: #3a2f26;
+    --ring: #c9754f;
+
+    --brand: #6e8163;
+    --brand-foreground: #14100c;
+    --success: #5e9268;
+    --success-foreground: #10140f;
+    --warning: #c79a3f;
+    --warning-foreground: #1c1712;
+    --info: #6fa0b4;
+    --info-foreground: #10141a;
+
+    --chart-1: #c86a4c;
+    --chart-2: #6e8163;
+    --chart-3: #d8b36a;
+    --chart-4: #b3a594;
+    --chart-5: #6fa0b4;
+
+    --sidebar: #201a14;
+    --sidebar-foreground: #ede4d8;
+    --sidebar-primary: #c86a4c;
+    --sidebar-primary-foreground: #14100c;
+    --sidebar-accent: #2a241e;
+    --sidebar-accent-foreground: #ede4d8;
+    --sidebar-border: #3a2f26;
+    --sidebar-ring: #c9754f;
+  }
+}
+
+@layer base {
+  * {
+    @apply border-border outline-ring/50;
+  }
+  body {
+    @apply bg-background text-foreground;
+  }
+  html {
+    @apply font-sans;
+  }
+  h1, h2, h3, h4 {
+    @apply font-serif;
+  }
+}
