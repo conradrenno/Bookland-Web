@@ -1,5 +1,9 @@
 import type { Metadata } from "next";
 import { Fraunces, Source_Sans_3 } from "next/font/google";
+
+import { SiteFooter } from "@/components/layout/site-footer";
+import { SiteHeader } from "@/components/layout/site-header";
+import { Toaster } from "@/components/ui/sonner";
 import "./globals.css";
 
 // Body / UI text.
@@ -34,7 +38,13 @@ export default function RootLayout({
       lang="pt-BR"
       className={`${fontSans.variable} ${fontSerif.variable} h-full antialiased`}
     >
-      <body className="min-h-full flex flex-col">{children}</body>
+      <body className="min-h-full flex flex-col">
+        <SiteHeader />
+        {/* `flex-1` so short pages still push the footer to the bottom. */}
+        <main className="flex flex-1 flex-col">{children}</main>
+        <SiteFooter />
+        <Toaster />
+      </body>
     </html>
   );
 }
