@@ -55,10 +55,12 @@ export function SearchBar({ className }: { className?: string }) {
         value={term}
         onChange={(event) => setTerm(event.target.value)}
         placeholder="Buscar por título ou autor"
-        // The writing area is its own surface, lighter than the header around
-        // it, so the field is legible as somewhere to type. `bg-field` rather
-        // than a literal white: the token carries the dark-mode value too.
-        className="h-10 rounded-full bg-field pl-9 dark:bg-field"
+        // The writing area is its own surface, so it needs its own type colour:
+        // the field is white, but the header around it sets light type, and an
+        // input inherits `color`. Without `text-foreground` the visitor types
+        // cream on white. (`--foreground` flips with the theme, so the same
+        // class is right on the dark field too.)
+        className="h-10 rounded-full bg-field pl-9 text-foreground dark:bg-field"
       />
     </form>
   );
