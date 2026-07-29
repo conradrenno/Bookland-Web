@@ -22,6 +22,7 @@ Ordem de leitura sugerida:
 | 14 | [Footer](14-footer.md) | Footer padrão: mapa do site, contato, pagamento |
 | 15 | [Convenções de código](15-code-conventions.md) | Camadas, organização por recurso, erro, estilo |
 | 16 | [Páginas de auth](16-auth-pages.md) | `/login` e `/register`: RHF+zod, `?next=`, erro → UI |
+| 17 | [Brief da logo](17-logo-brief.md) | Dimensões, formatos e por que monocromática |
 
 ## Fontes de verdade
 
