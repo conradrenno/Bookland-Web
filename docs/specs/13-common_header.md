@@ -41,6 +41,11 @@ registrados em [09-contract-notes.md](09-contract-notes.md) (item "Opção B").
 - **Contador do carrinho:** para o usuário logado, o header lê o carrinho
   server-side (BFF). Custo: 1 `GET /cart` por render de página com header —
   aceitável no MVP; otimizável depois (cache por request / contexto client).
+
+  > ### ⏸️ Adiado para a etapa 5 (decidido com o dono, 2026-07-29)
+  > O header entregue na etapa 4b tem **só o ícone**, sem contador — o módulo
+  > `lib/api/cart.ts` é da etapa 5, e antecipar metade dele só para um badge não
+  > paga. O link já se comporta como especificado (deslogado → `/login?next=/cart`).
 - **Logout** é mutação → client chama `POST /api/auth/logout` (route handler),
   que limpa cookies e revoga o refresh.
 

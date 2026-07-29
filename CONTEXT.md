@@ -129,38 +129,57 @@ Fase 2: wishlist, área de conta, painel admin.
 - [x] **Etapa 4a (2026-07-29):** camada de dados do catálogo — `books.ts`
       (+ `parseBookSearchParams`), `categories.ts`, `covers.ts`, `uuid.ts`,
       `format.ts`, `remotePatterns` corrigido. **201 unit + 14 smoke verdes.**
-- [ ] **Etapa 4b — próxima:** UI do catálogo — `/` (listagem + busca + filtros +
-      paginação), `BookCard`, detalhe do livro, e o `SiteHeader`/`SiteFooter`
-      (specs 13 e 14)
+- [x] **Etapa 4b (2026-07-29):** UI do catálogo — `/` (listagem, busca, filtros,
+      paginação), `/categories`, `/books/[bookId]`, `SiteHeader`/`SiteFooter`,
+      `error.tsx`/`loading.tsx`/`not-found.tsx`. **241 testes verdes**; app
+      exercitada contra o Spring no ar (dev e build de produção).
+- [ ] **Etapa 5 — próxima:** carrinho (`lib/api/cart.ts`, `/cart`, mutações via
+      route handlers) — e com ele o **contador do carrinho no header**
 - [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
       (`stockQuantity` primitivo). Cosmético: itens 16 e 20
 
 ## 🚦 Onde paramos — leia isto primeiro (2026-07-29)
 
-**Etapas 1, 2, 3 e 4a estão feitas, testadas e verificadas.** Comandos:
-`pnpm test:run` (**201** unit), `pnpm test:smoke` (**14** contra o Spring **no
+**Etapas 1 a 4 estão feitas, testadas e verificadas.** Comandos:
+`pnpm test:run` (**241** unit), `pnpm test:smoke` (**14** contra o Spring **no
 ar**), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
 O fluxo de auth está **fechado ponta a ponta**: middleware → `/login` → cookies.
-A camada de dados do catálogo está pronta; **falta a UI** (`/` ainda é o template
-do create-next-app).
+O **storefront de leitura está de pé**: catálogo com busca/filtros/paginação,
+categorias, detalhe do livro, header e footer em todas as páginas.
 
 ### O que existe em código
 
 ```
-lib/         config.ts · utils.ts · format.ts (preço/data/nota pt-BR)
-lib/api/     client.ts (apiFetch) · url.ts · errors.ts · problem.ts
-             error-codes.ts · error-messages.ts · types.ts · uuid.ts
-             auth.ts (server→Spring) · auth-client.ts (browser→BFF)
-             books.ts · categories.ts · covers.ts
-lib/auth/    session.ts · cookies.ts · refresh.ts · protected-routes.ts
-             server.ts · next-path.ts
-lib/forms/   apply-api-error.ts
+lib/          config.ts · utils.ts · format.ts (preço/data/nota pt-BR)
+lib/api/      client.ts (apiFetch) · url.ts · errors.ts · problem.ts
+              error-codes.ts · error-messages.ts · types.ts · uuid.ts
+              auth.ts (server→Spring) · auth-client.ts (browser→BFF)
+              books.ts · categories.ts · covers.ts
+lib/auth/     session.ts · cookies.ts · refresh.ts · protected-routes.ts
+              server.ts · next-path.ts
+lib/catalog/  search-href.ts (href do catálogo) · use-catalog-params.ts
+lib/forms/    apply-api-error.ts
+app/          layout.tsx (shell) · page.tsx (catálogo) · error · loading · not-found
 app/api/auth/{login,register,logout,refresh}/route.ts
-app/(auth)/  layout.tsx · login/page.tsx · register/page.tsx
-components/auth/ login-form · register-form · auth-card · form-alert · text-field
+app/(auth)/   layout.tsx · login/page.tsx · register/page.tsx
+app/(storefront)/ categories/page.tsx · books/[bookId]/page.tsx
+components/auth/    login-form · register-form · auth-card · form-alert · text-field
+components/catalog/ book-card · book-cover · rating-stars · search-bar
+                    catalog-filters · pagination
+components/layout/  site-header · site-footer · header-shell · categories-menu
+                    account-menu · mobile-nav · payment-marks
 middleware.ts
 test/msw.ts · test/dom.ts
 ```
+
+### 🟡 Pendências conhecidas do 4b (não bloqueiam)
+
+1. **Soft 404:** `notFound()` mostra a página certa mas responde **200**.
+   Reproduzido no build de produção; rota inexistente devolve 404 normalmente.
+   Detalhe e o que já foi descartado em [`03-catalog.md`](docs/specs/03-catalog.md).
+2. **Contador do carrinho** no header: adiado para a etapa 5 junto com `cart.ts`.
+3. **"Minha conta" / "Meus pedidos" / "Admin"** no menu de perfil (spec 13):
+   entram quando as páginas existirem — hoje só "Sair", para não gerar link morto.
 
 O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
 `jsdom` (`*.test.tsx`, componentes). `pnpm test:run` roda os dois; para um só,
@@ -190,17 +209,21 @@ O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
    na barra de endereço tem que mostrar o catálogo, não uma tela de erro.
    Ver [`09-contract-notes.md`](docs/specs/09-contract-notes.md) item 25.
 
-### Próximo passo natural
-A **UI do catálogo** (Etapa 4b): `/` (listagem + busca + filtros + paginação),
-`BookCard`, detalhe do livro e o `SiteHeader`/`SiteFooter`. As specs são a
-[03](docs/specs/03-catalog.md), [07](docs/specs/07-ui-design.md),
-[11](docs/specs/11-style-brief.md), [13](docs/specs/13-common_header.md) e
-[14](docs/specs/14-footer.md). A camada de dados já está pronta e testada —
-nada de UI de catálogo depende de decisão pendente.
+6. **Estado do catálogo mora na URL.** Todo controle (busca, filtro, ordenação,
+   pager) só reescreve a query string; a página re-renderiza no servidor.
+   `buildCatalogHref` é o inverso do `parseBookSearchParams` e centraliza duas
+   regras que se perdem quando cada componente monta href na mão: mudar filtro
+   **volta para a primeira página**, e valor default **some da URL**.
 
-Decidido com o dono (2026-07-29): o **contador do carrinho no header fica para a
-Etapa 5**, junto com `lib/api/cart.ts`. Por ora o header leva só o ícone,
-linkando `/cart` (deslogado → `/login?next=/cart`).
+### Próximo passo natural
+O **carrinho** (Etapa 5): `lib/api/cart.ts`, página `/cart`, mutações via route
+handlers (`POST /api/cart/items`, `PATCH|DELETE .../{bookId}`) e o **contador no
+header**. Spec: [05-cart-checkout.md](docs/specs/05-cart-checkout.md).
+Depois dele, checkout e pedidos ([06](docs/specs/06-orders.md)).
+
+Fora do caminho principal, ainda faltam do catálogo: **reviews na página do
+livro** ([04-reviews.md](docs/specs/04-reviews.md)) e o botão **"Adicionar ao
+carrinho"** — que depende da etapa 5.
 
 ⚠️ **Aviso do build (não urgente):** o Next 16 marca `middleware.ts` como
 convenção **deprecada** em favor de `proxy.ts`. Só um rename + ajuste de

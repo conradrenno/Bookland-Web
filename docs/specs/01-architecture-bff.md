@@ -65,10 +65,15 @@ src/
       cart/items/[bookId]/route.ts
       cart/checkout/route.ts
       books/[bookId]/reviews/route.ts
+  lib/catalog/
+    search-href.ts          # monta href do catálogo (puro)             [feito]
+    use-catalog-params.ts   # lê a query string no client               [feito]
   components/
-    ui/                     # shadcn (button, card, input, ...)        [feito]
-    layout/                 # site-header, site-footer
-    catalog/                # book-card, rating-stars, search-bar
+    ui/                     # shadcn (button, card, input, select, ...) [feito]
+    layout/                 # site-header, site-footer, header-shell,
+                            # categories-menu, account-menu, mobile-nav [feito]
+    catalog/                # book-card, book-cover, rating-stars,
+                            # search-bar, catalog-filters, pagination   [feito]
   middleware.ts             # gate de rotas + refresh preventivo       [pend.]
 ```
 

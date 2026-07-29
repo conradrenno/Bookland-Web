@@ -70,7 +70,18 @@ só renderização de página.
 Exibe: **capa** (`coverImageUrl`), título, ISBN, autores, editora, ano, edição,
 sinopse, preço, avaliação média e disponibilidade.
 
-- Livro inexistente → `ApiError(404)` → `notFound()` (página 404).
+- Livro inexistente → `ApiError(404)` → `notFound()` (página 404). Id malformado
+  é checado **antes** da chamada (`isUuid`): o upstream responderia 400, e um
+  link com typo é página inexistente, não requisição inválida.
+
+  > 🟡 **Soft 404 (aberto, 2026-07-29).** O `notFound()` renderiza a UI certa,
+  > mas o **status HTTP sai `200`**, não 404. Verificado no build de produção
+  > (`pnpm start`), não é artefato do dev. Rota inexistente (`/rota-qualquer`)
+  > devolve 404 corretamente — o problema é só quando o `notFound()` parte de
+  > dentro de uma página dinâmica. Descartado como causa: o `<Suspense>` do
+  > header (removê-lo não muda nada). Hipótese em aberto: a resposta já foi
+  > commitada pelo streaming quando a página resolve. Não afeta o que o visitante
+  > vê; afeta crawler/SEO. **Investigar isoladamente.**
 - **Estoque:** UI mostra disponibilidade ("Em estoque" / "Indisponível") a
   partir de `available`; a quantidade exata (`stockQuantity`) fica oculta por
   padrão (decisão de produto da story — "não expõe quantidade exata se
