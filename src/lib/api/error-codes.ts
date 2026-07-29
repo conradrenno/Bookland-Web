@@ -35,6 +35,8 @@ export const ErrorCodes = {
 
   // --- business rules (404 / 409 / 422) ------------------------------------
   BOOK_NOT_FOUND: "BOOK_NOT_FOUND",
+  /** Observed on `GET /categories/{id}/books` with an id that does not exist. */
+  CATEGORY_NOT_FOUND: "CATEGORY_NOT_FOUND",
   EMAIL_ALREADY_EXISTS: "EMAIL_ALREADY_EXISTS",
   DUPLICATE_REVIEW: "DUPLICATE_REVIEW",
   CART_ITEM_UNAVAILABLE: "CART_ITEM_UNAVAILABLE",

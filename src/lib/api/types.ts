@@ -116,16 +116,25 @@ export interface CreateBookRequest {
 
 export type UpdateBookRequest = Partial<Omit<CreateBookRequest, "isbn">>;
 
-/** Query params accepted by `GET /api/v1/books`. */
-export interface BookSearchParams {
+/**
+ * Query params accepted by `GET /api/v1/books`.
+ *
+ * A `type` rather than an `interface` on purpose: only the former gets an
+ * implicit index signature, which is what lets it be handed straight to
+ * `apiFetch`'s `QueryParams` without a cast.
+ */
+export type BookSearchParams = {
   q?: string;
+  /** Must be a well-formed UUID — upstream answers 400 INVALID_PARAMETER otherwise. */
   category?: UUID;
   minPrice?: number;
   maxPrice?: number;
+  /** Upstream default is `title`; unknown values are ignored, not rejected. */
   sort?: string;
+  /** Zero-based. */
   page?: number;
   size?: number;
-}
+};
 
 // ---- Reviews --------------------------------------------------------------
 
@@ -248,12 +257,12 @@ export interface AdminOrderSummaryViewModel extends OrderSummaryViewModel {
   customerId: UUID;
 }
 
-/** Query params accepted by `GET /api/v1/admin/orders`. */
-export interface AdminOrderSearchParams {
+/** Query params accepted by `GET /api/v1/admin/orders`. See the note on `BookSearchParams`. */
+export type AdminOrderSearchParams = {
   status?: OrderStatus;
   page?: number;
   size?: number;
-}
+};
 
 export interface UpdateOrderStatusRequest {
   newStatus: OrderStatus;
