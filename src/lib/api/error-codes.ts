@@ -52,6 +52,12 @@ export const ErrorCodes = {
   INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK",
   /** 404 from `PATCH /cart/items/{bookId}` for a book the cart does not hold. */
   BOOK_NOT_IN_CART: "BOOK_NOT_IN_CART",
+  /**
+   * 404 when the customer has no cart row at all — distinct from an empty one.
+   * `GET /cart` creates it on demand, so this only surfaces when a mutation is
+   * the customer's very first cart call, or after the cart was dropped.
+   */
+  CART_NOT_FOUND: "CART_NOT_FOUND",
 
   // --- server (500) ---------------------------------------------------------
   INTERNAL_ERROR: "INTERNAL_ERROR",

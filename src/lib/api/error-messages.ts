@@ -29,6 +29,7 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.CART_ITEM_UNAVAILABLE]: "Não temos essa quantidade em estoque.",
   [ErrorCodes.INSUFFICIENT_STOCK]: "Não temos essa quantidade em estoque.",
   [ErrorCodes.BOOK_NOT_IN_CART]: "Este item não está mais no seu carrinho.",
+  [ErrorCodes.CART_NOT_FOUND]: "Seu carrinho está vazio.",
   [ErrorCodes.BOOK_NOT_FOUND]: "Este livro não está mais no catálogo.",
 
   // Request shape

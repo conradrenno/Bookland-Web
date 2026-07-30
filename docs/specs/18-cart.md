@@ -85,11 +85,40 @@ não é `items.length`.
 Espelham os de auth: leem o corpo com `readJsonBody`, respondem `malformedBody()`
 quando não parseia, e passam qualquer falha por `toErrorResponse` — que já
 reencaminha `status` + `code` do `ApiError` e colapsa o resto num 500 genérico.
-Nada novo em `_shared.ts`.
 
-Validação de entrada no handler (`bookId` é UUID, `quantity` é inteiro ≥ 0)
-antes de chamar o upstream: é a mesma postura do `parseBookSearchParams` — lixo
-que o upstream responderia com 400 é recusado aqui, com mensagem nossa.
+**`_shared.ts` subiu de `app/api/auth/` para `app/api/`.** Os três helpers eram
+genéricos e o carrinho precisava dos mesmos; ficou em `api/auth/_shared.ts` só o
+`AuthSuccessBody`, que é de auth mesmo.
+
+Validação de entrada no handler (`bookId` é UUID, `quantity` é inteiro dentro da
+faixa) antes de chamar o upstream: mesma postura do `parseBookSearchParams` —
+lixo que o upstream responderia com 400 é recusado aqui, com mensagem nossa. Os
+pisos diferem de propósito: **1 no `POST`, 0 no `PATCH`**, porque só no segundo o
+zero significa remoção.
+
+### Sessão ausente responde 401, nunca redirect
+
+`/api/cart/*` **não** entra em `PROTECTED_PREFIXES`, e isso é deliberado. Se o
+middleware redirecionasse, o `fetch` seguiria o 307 sem avisar e entregaria ao
+componente um **200 com o HTML do login** — o bug clássico desse padrão. O
+middleware continua passando por essas rotas (renova token expirado a caminho),
+mas quem barra é o handler, com um 401 `TOKEN_MISSING` que o `cart-client`
+traduz em `sessionExpired: true`.
+
+### Verificado ponta a ponta (2026-07-29)
+
+Com o Next e o Spring no ar, via `curl` com cookie jar — a cadeia que os testes
+unitários mockam (cookie httpOnly → middleware → handler → Spring):
+
+| | Resultado |
+|---|---|
+| Sem sessão | `401 TOKEN_MISSING` |
+| `POST` sem `quantity` | handler preenche 1 |
+| `POST` 2 sobre linha de 1 | vira 3 (incremento confirmado pela rota) |
+| `PATCH 5` / `PATCH 0` | fixa 5 / remove a linha |
+| `PATCH 999` | `409 CART_ITEM_UNAVAILABLE` repassado com o `code` |
+| `DELETE /api/cart/items/lixo` | `400 INVALID_PARAMETER` **nosso**, sem tocar o Spring |
+| `DELETE` repetido | 200 nas duas vezes |
 
 ## Erros → UI
 

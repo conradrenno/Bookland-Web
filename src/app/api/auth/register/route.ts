@@ -4,7 +4,8 @@ import { register } from "@/lib/api/auth";
 import type { RegisterRequest } from "@/lib/api/types";
 import { writeTokens } from "@/lib/auth/cookies";
 import { decodeAccessToken, toSessionUser } from "@/lib/auth/session";
-import { malformedBody, readJsonBody, toErrorResponse, type AuthSuccessBody } from "../_shared";
+import { malformedBody, readJsonBody, toErrorResponse } from "@/app/api/_shared";
+import type { AuthSuccessBody } from "../_shared";
 
 /**
  * US-01 — registers and signs the new user in straight away.

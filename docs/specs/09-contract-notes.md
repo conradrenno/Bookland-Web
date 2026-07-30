@@ -574,9 +574,12 @@ quanto o `PATCH` respondem `409 CART_ITEM_UNAVAILABLE`, e o mesmo código cobre
 > Provável que `INSUFFICIENT_STOCK` seja da revalidação do **checkout** — a
 > confirmar na etapa 5b.
 
-**🔵 `BOOK_NOT_IN_CART`** (404) — código novo, não catalogado antes. Vem de
-`PATCH /cart/items/{bookId}` para livro que não está no carrinho. Adicionado ao
-`ErrorCodes`.
+**🔵 Dois códigos novos, não catalogados antes.** Ambos adicionados ao `ErrorCodes`:
+
+| `code` | Onde |
+|---|---|
+| `BOOK_NOT_IN_CART` (404) | `PATCH /cart/items/{bookId}` de livro que não está no carrinho |
+| `CART_NOT_FOUND` (404) | mutação quando o cliente **nunca teve** carrinho — `GET /cart` cria um vazio sob demanda, então só aparece se a primeira chamada de carrinho da conta for um `PATCH` |
 
 **🔵 Assimetria PATCH × DELETE, que a UI aproveita:**
 
@@ -603,6 +606,9 @@ estado pendente no componente.
    enquanto tem conteúdo. Nada no front deve usá-lo como chave.
 5. **A seed não tem livro sem estoque** — o caminho `available: false` na linha
    do carrinho segue sem verificação.
+6. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
+   teste (nem smoke) pode fixar um UUID — todos descobrem o livro via
+   `GET /books`. Vale para qualquer id copiado à mão para um teste.
 
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review
