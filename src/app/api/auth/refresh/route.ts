@@ -4,7 +4,8 @@ import { isApiError } from "@/lib/api/errors";
 import { clearTokens, readTokens, writeTokens } from "@/lib/auth/cookies";
 import { renewTokens } from "@/lib/auth/refresh";
 import { decodeAccessToken, toSessionUser } from "@/lib/auth/session";
-import { toErrorResponse, type AuthSuccessBody } from "../_shared";
+import { toErrorResponse } from "@/app/api/_shared";
+import type { AuthSuccessBody } from "../_shared";
 
 /**
  * US-03 — renews the token pair.

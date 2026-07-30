@@ -4,7 +4,8 @@ import { login } from "@/lib/api/auth";
 import type { LoginRequest } from "@/lib/api/types";
 import { writeTokens } from "@/lib/auth/cookies";
 import { decodeAccessToken, toSessionUser } from "@/lib/auth/session";
-import { malformedBody, readJsonBody, toErrorResponse, type AuthSuccessBody } from "../_shared";
+import { malformedBody, readJsonBody, toErrorResponse } from "@/app/api/_shared";
+import type { AuthSuccessBody } from "../_shared";
 
 /**
  * US-02 — signs in and stores the token pair as httpOnly cookies.

@@ -133,16 +133,36 @@ Fase 2: wishlist, área de conta, painel admin.
       paginação), `/categories`, `/books/[bookId]`, `SiteHeader`/`SiteFooter`,
       `error.tsx`/`loading.tsx`/`not-found.tsx`. **241 testes verdes**; app
       exercitada contra o Spring no ar (dev e build de produção).
-- [ ] **Etapa 5 — próxima:** carrinho (`lib/api/cart.ts`, `/cart`, mutações via
-      route handlers) — e com ele o **contador do carrinho no header**
+- [x] **Etapa 5a, passos 1–3 (2026-07-29):** carrinho até o botão de comprar —
+      `lib/api/cart.ts`, 3 route handlers, `cart-client.ts`, `AddToCartButton`,
+      card do catálogo redesenhado. **295 unit + 23 smoke verdes.**
+      → [`18-cart.md`](docs/specs/18-cart.md)
+- [ ] **Etapa 5a, passo 4 — próxima:** página `/cart` (lista, stepper, remoção,
+      total, estado vazio) e o **contador no header**
 - [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
-      (`stockQuantity` primitivo). Cosmético: itens 16 e 20
+      (`stockQuantity` primitivo — e agora **item 26**, o mesmo defeito em
+      `AddCartItemRequest.quantity`). Cosmético: itens 16 e 20
 
-## 🚦 Onde paramos — leia isto primeiro (2026-07-29)
+## 🚦 Onde paramos — leia isto primeiro (2026-07-29, noite)
 
-**Etapas 1 a 4 estão feitas, testadas e verificadas.** Comandos:
-`pnpm test:run` (**241** unit), `pnpm test:smoke` (**14** contra o Spring **no
-ar**), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
+**Etapas 1 a 4 e os passos 1–3 da 5a estão feitos, testados e verificados.**
+Comandos: `pnpm test:run` (**295** unit — 237 node + 58 jsdom),
+`pnpm test:smoke` (**23** contra o Spring **no ar**), `pnpm typecheck`,
+`pnpm lint` — todos limpos.
+
+> ⚠️ O número de testes citado nas etapas antigas acima está **desatualizado**
+> (o 241 da etapa 4b já era 248 na prática). O valor corrente é o desta seção.
+
+### Etapa 5a — o que já está de pé
+
+`lib/api/cart.ts` (4 chamadas + `cartItemCount`), 3 route handlers em
+`app/api/cart/`, `lib/api/cart-client.ts` (browser → BFF, devolve copy pt-BR
+pronta), `AddToCartButton` e o **card do catálogo redesenhado** com o CTA no
+hover. Falta só o **passo 4**: a página `/cart` e o contador no header.
+
+**Sincronização é `router.refresh()`** — sem estado global. O header mora no
+layout raiz, então o refresh re-renderiza a árvore inteira e o badge acompanha
+de graça. É por isso que `AddToCartButton` não guarda carrinho nenhum.
 O fluxo de auth está **fechado ponta a ponta**: middleware → `/login` → cookies.
 O **storefront de leitura está de pé**: catálogo com busca/filtros/paginação,
 categorias, detalhe do livro, header e footer em todas as páginas.
@@ -216,14 +236,30 @@ O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
    **volta para a primeira página**, e valor default **some da URL**.
 
 ### Próximo passo natural
-O **carrinho** (Etapa 5): `lib/api/cart.ts`, página `/cart`, mutações via route
-handlers (`POST /api/cart/items`, `PATCH|DELETE .../{bookId}`) e o **contador no
-header**. Spec: [05-cart-checkout.md](docs/specs/05-cart-checkout.md).
-Depois dele, checkout e pedidos ([06](docs/specs/06-orders.md)).
+**Passo 4 da etapa 5a:** a página `/cart` (lista, stepper de quantidade,
+remoção, total, estado vazio) e o **contador no header**. Plano em
+[18-cart.md](docs/specs/18-cart.md).
 
-Fora do caminho principal, ainda faltam do catálogo: **reviews na página do
-livro** ([04-reviews.md](docs/specs/04-reviews.md)) e o botão **"Adicionar ao
-carrinho"** — que depende da etapa 5.
+Para o contador: o header passa a chamar `getCart()` junto de `listCategories()`
+e `getCurrentUser()`. Envolver `getCart` em **`cache()` do React** — em `/cart` o
+header e a página pedem o mesmo carrinho no mesmo render, e sem isso são dois
+`GET`. Falha do `GET /cart` esconde o badge, não derruba o header (mesmo
+precedente do `safeCategories()`).
+
+Depois: **5b** (checkout) e pedidos ([06](docs/specs/06-orders.md)).
+Fora do caminho principal, faltam **reviews na página do livro**
+([04-reviews.md](docs/specs/04-reviews.md)).
+
+### 🟡 Achados abertos desta etapa (não bloqueiam)
+
+1. **`nativeButton` do Base UI:** existem **8** usos de
+   `<Button render={<Link/>}>` em `not-found.tsx`, `page.tsx`,
+   `catalog-filters.tsx`, `categories-menu.tsx` e `site-header.tsx` que emitem
+   aviso no console. O `AddToCartButton` resolveu o caso dele usando
+   `<Link className={buttonVariants(...)}>` — mesma aparência, semântica de
+   link. Vale replicar, mas é limpeza à parte.
+2. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
+   teste pode fixar UUID; os smoke descobrem o livro via `GET /books`.
 
 ⚠️ **Aviso do build (não urgente):** o Next 16 marca `middleware.ts` como
 convenção **deprecada** em favor de `proxy.ts`. Só um rename + ajuste de

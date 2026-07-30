@@ -23,6 +23,15 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.INVALID_REFRESH_TOKEN]: "Sua sessão expirou. Faça login novamente.",
   [ErrorCodes.INSUFFICIENT_ROLE]: "Você não tem acesso a este recurso.",
 
+  // Cart. `CART_ITEM_UNAVAILABLE` covers both "sold out" and "we have fewer
+  // than you asked for" — the upstream uses one code for the two, and its
+  // `detail` carries the available count in English, which we do not surface.
+  [ErrorCodes.CART_ITEM_UNAVAILABLE]: "Não temos essa quantidade em estoque.",
+  [ErrorCodes.INSUFFICIENT_STOCK]: "Não temos essa quantidade em estoque.",
+  [ErrorCodes.BOOK_NOT_IN_CART]: "Este item não está mais no seu carrinho.",
+  [ErrorCodes.CART_NOT_FOUND]: "Seu carrinho está vazio.",
+  [ErrorCodes.BOOK_NOT_FOUND]: "Este livro não está mais no catálogo.",
+
   // Request shape
   [ErrorCodes.VALIDATION_ERROR]: "Verifique os campos destacados.",
   [ErrorCodes.INVALID_PARAMETER]: "Verifique os campos destacados.",

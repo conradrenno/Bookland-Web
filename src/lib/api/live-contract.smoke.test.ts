@@ -8,9 +8,10 @@
  *
  * Uses the dev-profile admin seed (see application.yml `bookland.admin.*`).
  */
-import { describe, expect, it } from "vitest";
+import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
 import { getBook, searchBooks } from "./books";
+import { addCartItem, cartItemCount, getCart, removeCartItem, updateCartItem } from "./cart";
 import { listCategories, listCategoryBooks } from "./categories";
 import { apiFetch } from "./client";
 import { ErrorCodes } from "./error-codes";
@@ -19,6 +20,16 @@ import type { BookViewModel, PageResult, TokenViewModel } from "./types";
 
 /** An id of the right shape that nothing is seeded with. */
 const ABSENT_ID = "00000000-0000-0000-0000-000000000000";
+
+const ADMIN = { email: "admin@bookland.com", password: "admin1234" };
+
+async function signIn(): Promise<string> {
+  const token = await apiFetch<TokenViewModel>("/api/v1/auth/login", {
+    method: "POST",
+    body: ADMIN,
+  });
+  return token.accessToken;
+}
 
 describe("live API smoke", () => {
   it("GET /books with query params", async () => {
@@ -156,5 +167,126 @@ describe("live catalogue smoke", () => {
     const error = await listCategoryBooks(ABSENT_ID).catch((e: unknown) => e);
     expect(isApiError(error) && error.isNotFound).toBe(true);
     expect(isApiError(error) && error.code).toBe(ErrorCodes.CATEGORY_NOT_FOUND);
+  });
+});
+
+/**
+ * These are the tests stage 5a was opened with: the three cart rules in
+ * docs/specs/05-cart-checkout.md come from a Linear story, not from observation,
+ * and the owner's standing rule is that the API wins. Everything asserted here
+ * was confirmed by hand first (2026-07-29) and then locked down.
+ *
+ * They share one real cart — the admin's — so each test starts by emptying it.
+ */
+describe("live cart smoke", () => {
+  let token: string;
+  let book: BookViewModel;
+
+  beforeAll(async () => {
+    token = await signIn();
+    // Needs stock to exercise the quantity rules; the seed has no sold-out book.
+    const { content } = await searchBooks({ size: 20 });
+    book = content.find((candidate) => candidate.stockQuantity > 2)!;
+    expect(book).toBeDefined();
+  });
+
+  beforeEach(async () => {
+    const current = await getCart(token);
+    for (const item of current.items) {
+      await removeCartItem(token, item.bookId);
+    }
+  });
+
+  it("hands back an empty cart rather than 404ing when nothing was ever added", async () => {
+    const cart = await getCart(token);
+    expect(cart.items).toEqual([]);
+    expect(cart.total).toBe(0);
+    expect(cart.customerId).toBeTruthy();
+  });
+
+  it("adds to the existing quantity instead of replacing it", async () => {
+    await addCartItem(token, book.id, 2);
+    const cart = await addCartItem(token, book.id, 1);
+
+    // The rule the UI depends on: the button sends "how many more", never the
+    // new total. Pre-summing here would double the line.
+    expect(cart.items).toHaveLength(1);
+    expect(cart.items[0].quantity).toBe(3);
+    expect(cartItemCount(cart)).toBe(3);
+  });
+
+  it("returns lines already carrying title, cover and availability", async () => {
+    // This is what removed the BFF aggregation that stage 5a originally planned.
+    const cart = await addCartItem(token, book.id, 1);
+    expect(cart.items[0]).toMatchObject({
+      bookId: book.id,
+      title: book.title,
+      quantity: 1,
+      unitPrice: expect.any(Number),
+      subtotal: expect.any(Number),
+      available: true,
+    });
+  });
+
+  it("does not default an omitted quantity — it rejects the body", async () => {
+    // Why `addCartItem` always sends one: the OpenAPI calls `quantity` optional,
+    // but upstream binds it to a primitive int (09-contract-notes.md item 26).
+    const error = await apiFetch("/api/v1/cart/items", {
+      method: "POST",
+      accessToken: token,
+      body: { bookId: book.id },
+    }).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(400);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.MALFORMED_REQUEST);
+  });
+
+  it("sets an exact quantity on PATCH, and removes the line at 0", async () => {
+    await addCartItem(token, book.id, 2);
+
+    const patched = await updateCartItem(token, book.id, 1);
+    expect(patched.items[0].quantity).toBe(1);
+
+    const emptied = await updateCartItem(token, book.id, 0);
+    expect(emptied.items).toEqual([]);
+    // Confirmed by a follow-up read, not just by the mutation's own response.
+    expect((await getCart(token)).items).toEqual([]);
+  });
+
+  it("refuses to exceed stock with CART_ITEM_UNAVAILABLE, never INSUFFICIENT_STOCK", async () => {
+    const tooMany = book.stockQuantity + 1;
+
+    const onAdd = await addCartItem(token, book.id, tooMany).catch((e: unknown) => e);
+    expect(isApiError(onAdd) && onAdd.status).toBe(409);
+    expect(isApiError(onAdd) && onAdd.code).toBe(ErrorCodes.CART_ITEM_UNAVAILABLE);
+
+    await addCartItem(token, book.id, 1);
+    const onPatch = await updateCartItem(token, book.id, tooMany).catch((e: unknown) => e);
+    expect(isApiError(onPatch) && onPatch.code).toBe(ErrorCodes.CART_ITEM_UNAVAILABLE);
+  });
+
+  it("counts the running total against stock, not each request in isolation", async () => {
+    // Two requests, each under stock, whose sum is over it.
+    await addCartItem(token, book.id, book.stockQuantity);
+    const error = await addCartItem(token, book.id, 1).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_ITEM_UNAVAILABLE);
+  });
+
+  it("404s a PATCH on a missing line, but takes a repeated DELETE quietly", async () => {
+    const error = await updateCartItem(token, book.id, 1).catch((e: unknown) => e);
+    expect(isApiError(error) && error.status).toBe(404);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.BOOK_NOT_IN_CART);
+
+    // DELETE being idempotent is what lets the UI ignore a double-click.
+    await addCartItem(token, book.id, 1);
+    expect((await removeCartItem(token, book.id)).items).toEqual([]);
+    expect((await removeCartItem(token, book.id)).items).toEqual([]);
+  });
+
+  it("404s a book that is not in the catalogue at all", async () => {
+    const error = await addCartItem(token, ABSENT_ID, 1).catch((e: unknown) => e);
+    expect(isApiError(error) && error.isNotFound).toBe(true);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.BOOK_NOT_FOUND);
   });
 });

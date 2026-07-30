@@ -532,6 +532,84 @@ porque a origem dos parâmetros é a **URL do navegador**, editável à mão.
 5. **`GET /categories` devolve array cru**, não `PageResult` — única listagem não
    paginada do contrato.
 
+## 26. Carrinho: comportamento real das mutações — NOVO (2026-07-29)
+
+Levantado ao vivo antes de escrever `lib/api/cart.ts`, pela mesma razão do item
+25: a [05-cart-checkout.md](05-cart-checkout.md) descreve estas regras a partir
+da **story**, e a regra do dono é que a **API vence**. Todas foram exercitadas
+com a conta admin e estão travadas em `live-contract.smoke.test.ts`.
+
+**✅ As três regras da story se confirmam:**
+
+| Regra afirmada pela story | Verificado |
+|---|---|
+| Adicionar livro já presente **incrementa** | ✅ `POST` 2 e depois 3 → linha fica **5** |
+| `PATCH quantity: 0` **remove** a linha | ✅ some do `items`, confirmado por `GET` seguinte |
+| Exceder estoque → **409** | ✅ e o estoque é medido contra o **acumulado no carrinho**, não contra cada requisição isolada |
+
+**🔴 `AddCartItemRequest.quantity` é obrigatório na prática.**
+
+O OpenAPI marca opcional (`minimum: 1`) e a story fala em "default 1". Nenhum dos
+dois vale: upstream mapeia para **`int` primitivo**, então omitir o campo — ou
+mandar `null` — dá **`400 MALFORMED_REQUEST`**, sem indicação de qual campo.
+
+```
+POST /cart/items  {"bookId":"…"}          → 400 MALFORMED_REQUEST
+POST /cart/items  {"bookId":"…","quantity":null} → 400
+POST /cart/items  {"bookId":"…","quantity":0}    → 400 VALIDATION_ERROR (errors.quantity)
+```
+
+É **a mesma classe de defeito do item 24** (`stockQuantity`), agora num segundo
+DTO — vale conferir se há outros. Contorno no BFF: `addCartItem` **sempre** envia
+`quantity`, com default 1 do nosso lado; o tipo em `types.ts` virou obrigatório.
+
+**🔵 `CART_ITEM_UNAVAILABLE` é o único código de estoque no carrinho.**
+
+`INSUFFICIENT_STOCK` está no nosso catálogo mas **nunca apareceu**. Tanto o `POST`
+quanto o `PATCH` respondem `409 CART_ITEM_UNAVAILABLE`, e o mesmo código cobre
+"esgotou" e "você pediu mais do que existe" — não dá para distinguir os dois pelo
+`code`. O `detail` traz `available=14`, mas em inglês e sujeito a reescrita, então
+**não é exibido**; a copy é uma só ("Não temos essa quantidade em estoque").
+
+> Provável que `INSUFFICIENT_STOCK` seja da revalidação do **checkout** — a
+> confirmar na etapa 5b.
+
+**🔵 Dois códigos novos, não catalogados antes.** Ambos adicionados ao `ErrorCodes`:
+
+| `code` | Onde |
+|---|---|
+| `BOOK_NOT_IN_CART` (404) | `PATCH /cart/items/{bookId}` de livro que não está no carrinho |
+| `CART_NOT_FOUND` (404) | mutação quando o cliente **nunca teve** carrinho — `GET /cart` cria um vazio sob demanda, então só aparece se a primeira chamada de carrinho da conta for um `PATCH` |
+
+**🔵 Assimetria PATCH × DELETE, que a UI aproveita:**
+
+| | Linha ausente |
+|---|---|
+| `PATCH` | **404 `BOOK_NOT_IN_CART`** |
+| `DELETE` | **200** com o carrinho inalterado — **idempotente** |
+
+Duplo clique em "remover" não gera erro. Duplo clique no stepper, sim — daí o
+estado pendente no componente.
+
+**⚪ Menores, sem ação:**
+
+1. **`DELETE /cart/items/{bookId}` devolve 200 + `CartViewModel`**, não 204. É a
+   exceção à regra do item 15 ("DELETEs → 204") e está certo: a resposta é o
+   carrinho atualizado, que é justamente o que evita um `GET` de volta.
+2. **`bookId` não-UUID no corpo → `400 MALFORMED_REQUEST`** (falha de
+   desserialização), não `INVALID_PARAMETER` com `errors.bookId`.
+3. **`updatedAt` vem sem fuso**: `"2026-07-29T22:09:28.0627129"` — sem `Z` e sem
+   offset, com 7 casas decimais. `ISODateTime` no `types.ts` documenta o formato
+   com `Z`. Não incomoda hoje (o carrinho não exibe data), mas **vai incomodar em
+   pedidos**, onde a data é exibida: `new Date()` vai ler como **hora local**.
+4. **`cart.id` muda** quando o carrinho fica vazio e recebe item de novo; estável
+   enquanto tem conteúdo. Nada no front deve usá-lo como chave.
+5. **A seed não tem livro sem estoque** — o caminho `available: false` na linha
+   do carrinho segue sem verificação.
+6. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
+   teste (nem smoke) pode fixar um UUID — todos descobrem o livro via
+   `GET /books`. Vale para qualquer id copiado à mão para um teste.
+
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review
   exige pedido `DELIVERED`, que só ADMIN promove.
