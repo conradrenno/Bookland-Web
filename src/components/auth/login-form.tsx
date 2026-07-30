@@ -6,8 +6,8 @@ import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
 
-import { FormAlert } from "@/components/auth/form-alert";
-import { TextField } from "@/components/auth/text-field";
+import { FormAlert } from "@/components/form/form-alert";
+import { TextField } from "@/components/form/text-field";
 import { Button } from "@/components/ui/button";
 import { signIn } from "@/lib/api/auth-client";
 import { applyApiError } from "@/lib/forms/apply-api-error";
