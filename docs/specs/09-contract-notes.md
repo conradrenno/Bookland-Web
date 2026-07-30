@@ -598,17 +598,147 @@ estado pendente no componente.
    carrinho atualizado, que é justamente o que evita um `GET` de volta.
 2. **`bookId` não-UUID no corpo → `400 MALFORMED_REQUEST`** (falha de
    desserialização), não `INVALID_PARAMETER` com `errors.bookId`.
-3. **`updatedAt` vem sem fuso**: `"2026-07-29T22:09:28.0627129"` — sem `Z` e sem
-   offset, com 7 casas decimais. `ISODateTime` no `types.ts` documenta o formato
-   com `Z`. Não incomoda hoje (o carrinho não exibe data), mas **vai incomodar em
-   pedidos**, onde a data é exibida: `new Date()` vai ler como **hora local**.
+3. ~~**`updatedAt` vem sem fuso**~~ ✅ **RESOLVIDO pelo dono em 2026-07-30** —
+   `LocalDateTime` virou `Instant` em todos os módulos. Ver o fim do item 27.
 4. **`cart.id` muda** quando o carrinho fica vazio e recebe item de novo; estável
    enquanto tem conteúdo. Nada no front deve usá-lo como chave.
-5. **A seed não tem livro sem estoque** — o caminho `available: false` na linha
-   do carrinho segue sem verificação.
+5. ~~**A seed não tem livro sem estoque**~~ — verificado no item 27: dá para
+   fabricar o caso com `PATCH /books/{id} {"stockQuantity":0}` como admin, e a
+   linha do carrinho **passa a vir `available: false`** sem precisar recarregar
+   nada além do `GET /cart`.
 6. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
    teste (nem smoke) pode fixar um UUID — todos descobrem o livro via
    `GET /books`. Vale para qualquer id copiado à mão para um teste.
+
+## 27. Checkout e pedidos: comportamento real — NOVO (2026-07-30)
+
+Levantado ao vivo com a conta admin **antes** de escrever a spec da etapa 5b,
+pela mesma razão dos itens 25 e 26. A [05-cart-checkout.md](05-cart-checkout.md)
+descreve o checkout a partir da **story**, e a story erra em três pontos.
+
+**🔴 O pedido nasce `CONFIRMED`, já pago — não existe etapa de pagamento.**
+
+A story fala em "status PENDING" e a spec 05 apostou em `AWAITING_PAYMENT`. O que
+acontece de verdade é que `POST /cart/checkout` **cobra na hora**: devolve um
+`OrderViewModel` com `status: "CONFIRMED"` e um `statusHistory` que **já tem** a
+transição `AWAITING_PAYMENT → CONFIRMED`. O `AWAITING_PAYMENT` existe por um
+instante dentro da transação e nunca é observável pelo cliente.
+
+```
+POST /cart/checkout {"paymentMethod":"PIX"}
+→ 200 { status: "CONFIRMED",
+        statusHistory: [{ fromStatus:"AWAITING_PAYMENT", toStatus:"CONFIRMED", … }] }
+
+GET /payments/order/{orderId}
+→ 200 { status:"APPROVED", method:"PIX", gatewayTransactionId:"SIM-1759835a-…" }
+```
+
+O gateway é **simulado** (prefixo `SIM-`) e aprovou **8 de 8** tentativas. Não dá
+para provar que nunca recusa, então a UI **exibe o `status` que vier** e sabe
+desenhar `PAYMENT_FAILED` — mas não constrói fluxo de "pagar de novo", que não
+existe endpoint para fazer. Consequência prática: **não há tela de pagamento**;
+`paymentMethod` é a única coisa que o backend recebe (sem cartão, sem endereço).
+
+**🔴 Carrinho vazio no checkout responde `404 CART_NOT_FOUND`, não 409.**
+
+E vale mesmo para carrinho que **existe e ficou vazio** (adicionar + remover):
+
+```
+POST /cart/checkout  (carrinho sem itens)  → 404 CART_NOT_FOUND
+GET  /cart           (mesmo instante)      → 200 {items: [], total: 0}
+```
+
+Os dois endpoints discordam sobre o mesmo estado. A copy que já temos para
+`CART_NOT_FOUND` ("Seu carrinho está vazio.") serve, mas a UI não deve depender
+disso: quem impede o caso é a própria página, que não oferece o CTA sem itens.
+
+**🔵 `INSUFFICIENT_STOCK` continua não existindo.** A suspeita do item 26 (de que
+ele seria da revalidação do checkout) **não se confirma**: forçando o caso —
+livro no carrinho, admin zera o estoque, checkout — vem outra vez
+`409 CART_ITEM_UNAVAILABLE`. O código segue no catálogo sem nunca ter aparecido.
+
+**🔴 Os itens problemáticos do 409 só existem dentro do `detail`, em inglês.**
+
+```
+409 { code:"CART_ITEM_UNAVAILABLE",
+      detail:"Insufficient stock for books: [175c35f7-0e36-4bbe-a43d-6402caef0cbf]" }
+```
+
+A spec 05 prometia "409 com os itens problemáticos; UI lista e aponta o que
+remover". **Não há campo estruturado** — nem `errors`, nem lista de ids. Fazer
+parse do `detail` violaria a regra de nunca ramificar por mensagem
+([15](15-code-conventions.md)), e ele é documentado como reword-able.
+
+**Não precisa:** o `GET /cart` já marca `available: false` na linha exata assim
+que o estoque some (verificado). Então o caminho do 409 é *devolver o cliente ao
+carrinho* — que se explica sozinho, com a copy e o "+" bloqueado que a etapa 5a
+já entregou.
+
+**🔵 Validação do `paymentMethod`: dois códigos diferentes para o mesmo campo.**
+
+| Corpo | Resposta |
+|---|---|
+| `{}` (ausente) | `400 VALIDATION_ERROR` com `errors.paymentMethod: ["must not be null"]` |
+| `{"paymentMethod":"BITCOIN"}` | `400 MALFORMED_REQUEST`, sem dizer qual campo |
+
+O segundo é o enum quebrando na desserialização — mesma classe dos itens 24 e 26.
+Como o valor sempre sai de um seletor nosso, o BFF valida contra a lista antes de
+subir e nenhum dos dois deveria alcançar o usuário.
+
+**🔵 Pedidos — o que confere e o que não confere com a [06](06-orders.md):**
+
+| Afirmação da spec 06 | Ao vivo |
+|---|---|
+| `DELETE /orders/{id}` cancela | ✅ e **funciona com `CONFIRMED`**, devolvendo o pedido com `status: "CANCELLED"` |
+| Detalhe só do dono; inexistente → 404 | ✅ `404 ORDER_NOT_FOUND` (código novo, catalogar) |
+| Histórico **ordenado por data decrescente** | ❌ **veio crescente** — `content[0]` é o pedido mais antigo |
+
+**📘 O README do backend (lido em 2026-07-30) explica duas dessas linhas:**
+
+1. **A ordenação decrescente nunca foi prometida ao cliente.** O README promete
+   "newest first" **só** em `GET /admin/orders`; a rota do cliente aparece como
+   "Order history (paginated)", sem ordem. Ou seja: não é bug, é ausência de
+   garantia. **Ordenar no BFF** na etapa 6 — e não contar com a ordem que vier.
+2. **Cancelamento sai do palpite.** "From `AWAITING_PAYMENT` or `CONFIRMED`; the
+   latter triggers stock restore and automatic refund." Confirma o `DELETE` que
+   rodei e explica o `REFUNDED` que a página do pedido pode exibir depois.
+
+**📘 E abre uma porta que a spec 19 aproveita:** `GET /payments/order/{orderId}`
+é **autenticado, não admin** — o cliente lê o próprio pagamento. Como o
+`OrderViewModel` **não traz `paymentMethod`**, é a única forma de mostrar na tela
+o método que o cliente acabou de escolher.
+
+**📘 Segunda conta semeada:** `joao@bookland.com` / `joao1234` (CUSTOMER), além do
+admin. Permite finalmente medir o acesso a pedido de outro cliente (403 × 404) e
+rodar os smoke pelo perfil que a app de fato usa.
+
+**✅ Datas sem fuso — RESOLVIDO no mesmo dia (2026-07-30).**
+
+O achado era: `"2026-07-30T13:01:34.4862"`, sem `Z` e sem offset, agora em campo
+**exibido** (`createdAt` do pedido, `changedAt` do histórico). Uma string assim
+não identifica um instante — quem faz o parse aplica o próprio fuso. Medido em
+Node com a string real: máquina brasileira lia 13:01, container em UTC lia 10:01.
+Em SSR o servidor e o navegador discordariam e o texto **mudaria sozinho** depois
+da hidratação.
+
+O dono trocou `LocalDateTime` por **`Instant` em todos os módulos**. Conferido ao
+vivo logo depois de subir:
+
+```
+"createdAt": "2026-07-30T19:55:57.117193400Z"
+```
+
+| Conferência | Resultado |
+|---|---|
+| Campos varridos (carrinho, pedido, histórico, pagamento, usuário) | **9**, todos com `Z` |
+| Tipo | **string** ISO — não epoch (`WRITE_DATES_AS_TIMESTAMPS` está desligado, que é o default) |
+| Valor | bate com `date -u` no mesmo instante — **sem deslocamento** na conversão |
+| 9 casas decimais (nanossegundos do `Instant`) | `new Date()` parseia e trunca para ms |
+
+Consequência no front: o `parseApiDateTime()` que a [19](19-checkout.md) previa
+**deixa de existir** — era só para anexar `-03:00` ao que não tinha fuso. Fica no
+lugar dele uma asserção nos smoke (`/(Z|[+-]\d{2}:?\d{2})$/` em toda data de toda
+resposta), que é o que denuncia módulo esquecido ou regressão.
 
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review

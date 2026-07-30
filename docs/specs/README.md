@@ -24,6 +24,7 @@ Ordem de leitura sugerida:
 | 16 | [Páginas de auth](16-auth-pages.md) | `/login` e `/register`: RHF+zod, `?next=`, erro → UI |
 | 17 | [Brief da logo](17-logo-brief.md) | Dimensões, formatos e por que monocromática |
 | 18 | [Carrinho (etapa 5a)](18-cart.md) | Plano de implementação: `cart.ts`, `/cart`, contador (US-13) |
+| 19 | [Checkout e pedido (etapa 5b)](19-checkout.md) | Plano: `/checkout`, `/orders/[id]`, status (US-14, US-18) |
 
 ## Fontes de verdade
 

@@ -13,6 +13,9 @@ Regras (story):
 - Só pedidos do cliente autenticado (isolamento por `customerId`, feito no
   backend via token).
 - Paginado, ordenado por data decrescente.
+  > ❌ **Não confere (2026-07-30):** o histórico veio em ordem **crescente** —
+  > `content[0]` é o pedido mais antigo. Ordenar no BFF se persistir. Item 27 de
+  > [09-contract-notes.md](09-contract-notes.md).
 
 UI: lista de cards — nº do pedido (id curto), data (pt-BR), `StatusBadge`,
 total (`R$`), qtd. de itens. Vazio: "você ainda não fez pedidos".
@@ -44,12 +47,12 @@ mas esse endpoint **não existe**; o contrato cancela via `DELETE
 /api/v1/orders/{orderId}` (operationId `cancel`, retorna o `OrderViewModel`).
 Usamos o `DELETE`. Ver [09-contract-notes.md](09-contract-notes.md).
 
-Regras (story):
-- Só pedidos ainda não enviados podem ser cancelados. A story diz "status
-  PENDING"; como PENDING não existe no enum, o front trata como **cancelável**
-  os status *pré-envio* — provavelmente `AWAITING_PAYMENT` e `CONFIRMED` (a
-  regra real é do backend; o front só habilita/desabilita o botão e reflete o
-  erro).
+Regras (confirmadas pelo README do backend + `DELETE` ao vivo, 2026-07-30):
+- Cancelável a partir de **`AWAITING_PAYMENT` ou `CONFIRMED`** — deixou de ser
+  palpite. Cancelar um `CONFIRMED` dispara **restauração de estoque e estorno
+  automático**, então o pagamento do pedido passa a `REFUNDED`.
+- Como o checkout já entrega `CONFIRMED`, na prática **todo pedido novo nasce
+  cancelável**; `AWAITING_PAYMENT` nunca é observado pelo cliente.
 - Ao cancelar, o estoque é restaurado (backend); `status` vira `CANCELLED`.
 - Cancelar pedido de outro cliente → **403**.
 
@@ -63,12 +66,13 @@ UI:
 
 | `OrderStatus` | Rótulo pt-BR | Cor | Cancelável? |
 |---|---|---|---|
-| `AWAITING_PAYMENT` | Aguardando pagamento | amber | sim |
-| `CONFIRMED` | Confirmado | blue | sim (até enviar) |
+| `AWAITING_PAYMENT` | Aguardando pagamento | amber | sim (nunca observado: o checkout já entrega `CONFIRMED`) |
+| `CONFIRMED` | Confirmado | blue | **sim — README + verificado ao vivo (2026-07-30)** |
 | `SHIPPED` | Enviado | indigo | não |
 | `DELIVERED` | Entregue | green | não |
 | `CANCELLED` | Cancelado | zinc | — |
 | `PAYMENT_FAILED` | Pagamento falhou | red | — |
 
-> A coluna "cancelável" é palpite de UI a confirmar com o backend; a fonte de
-> verdade é a resposta do `DELETE` (409/422 quando não permitido).
+> A coluna "cancelável" **deixou de ser palpite** (README do backend + `DELETE`
+> ao vivo em 2026-07-30). A fonte de verdade continua sendo a resposta do
+> `DELETE` — o front habilita o botão pelo mapa e reflete o erro se vier um.

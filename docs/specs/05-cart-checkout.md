@@ -45,15 +45,23 @@ Regras (story):
 - Ao confirmar, estoque é decrementado atomicamente e um `Order` é criado com
   preços congelados.
 
-⚠️ **Status inicial do pedido:** a story diz "status PENDING", mas o enum do
-contrato **não tem PENDING**. O checkout devolve um `OrderViewModel` cujo
-`status` provavelmente é `AWAITING_PAYMENT` (há fluxo de pagamento: enum de
-`PaymentStatus` = PENDING/APPROVED/DECLINED/REFUNDED). O front **exibe o `status`
-que vier** — não assume PENDING. Ver [09-contract-notes.md](09-contract-notes.md).
+✅ **Status inicial do pedido — resolvido ao vivo (2026-07-30).** Não é `PENDING`
+(que não existe no enum) nem `AWAITING_PAYMENT`: o checkout **cobra na hora** e
+devolve o pedido já **`CONFIRMED`**, com o pagamento `APPROVED` por um gateway
+simulado. `AWAITING_PAYMENT` só aparece dentro do `statusHistory`. Não há etapa
+de pagamento a construir. Item 27 de [09-contract-notes.md](09-contract-notes.md).
 
-Fluxo de UI:
+⚠️ **As regras de erro acima vieram da story e duas estão erradas:**
+
+| Afirmado acima | Ao vivo |
+|---|---|
+| Item indisponível → 409 **com os itens problemáticos** | 409 `CART_ITEM_UNAVAILABLE` **sem campo estruturado** — os ids só aparecem no `detail`, em inglês |
+| (implícito) carrinho vazio → 409 | **404 `CART_NOT_FOUND`** |
+
+Fluxo de UI (revisado — plano em [19-checkout.md](19-checkout.md)):
 1. `/checkout` mostra resumo do carrinho + seletor de `paymentMethod`.
 2. Sucesso → redireciona para `/orders/{id}` com o pedido criado.
-3. **409** (estoque) → volta ao carrinho destacando itens problemáticos.
-4. Pagamento pode resultar em `CONFIRMED` ou `PAYMENT_FAILED` — a página do
-   pedido reflete o status e oferece a ação apropriada.
+3. **409** (estoque) → volta ao carrinho, que já marca `available: false` na
+   linha exata — a UI não tenta extrair os itens do 409.
+4. O front **exibe o `status` que vier**, `PAYMENT_FAILED` incluído, mas não
+   oferece "pagar de novo": não existe endpoint para isso.
