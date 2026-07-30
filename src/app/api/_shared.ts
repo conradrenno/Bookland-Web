@@ -11,7 +11,7 @@ import { NextResponse } from "next/server";
 import { ErrorCodes } from "@/lib/api/error-codes";
 import { isApiError } from "@/lib/api/errors";
 import { isUuid } from "@/lib/api/uuid";
-import type { UUID } from "@/lib/api/types";
+import { PAYMENT_METHODS, type PaymentMethod, type UUID } from "@/lib/api/types";
 
 /**
  * Translates a failure into the response the browser sees.
@@ -93,6 +93,26 @@ export function isValidQuantity(value: unknown, min: number): value is number {
 export function invalidQuantity(): NextResponse {
   return NextResponse.json(
     { code: ErrorCodes.VALIDATION_ERROR, message: "Quantidade inválida." },
+    { status: 400 },
+  );
+}
+
+/**
+ * Whether a value is one of the four payment methods.
+ *
+ * Checked here because the upstream has *two* different answers for a bad one
+ * and neither is usable: a missing field is `400 VALIDATION_ERROR`, while a
+ * value outside the enum breaks deserialisation and comes back as a bare
+ * `400 MALFORMED_REQUEST` naming no field (09-contract-notes.md item 27). The
+ * value always comes from our own picker, so neither should ever be reachable.
+ */
+export function isValidPaymentMethod(value: unknown): value is PaymentMethod {
+  return PAYMENT_METHODS.includes(value as PaymentMethod);
+}
+
+export function invalidPaymentMethod(): NextResponse {
+  return NextResponse.json(
+    { code: ErrorCodes.VALIDATION_ERROR, message: "Forma de pagamento inválida." },
     { status: 400 },
   );
 }
