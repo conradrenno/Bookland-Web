@@ -42,6 +42,7 @@ lib/api/cart.test.ts          MSW: caminho feliz + 401 + 409 de estoque
 app/api/cart/items/route.ts             POST   → adicionar
 app/api/cart/items/[bookId]/route.ts    PATCH  → quantidade · DELETE → remover
 lib/api/cart-client.ts        browser → route handlers (espelha auth-client.ts)
+lib/cart/current-cart.ts      cookie → carrinho, memoizado; contagem segura p/ header
 app/(storefront)/cart/page.tsx          Server Component: getCart() + render
 components/cart/cart-line.tsx           "use client": quantidade e remoção
 components/cart/quantity-stepper.tsx    − / valor / + com estado pendente
@@ -236,3 +237,36 @@ o Spring antes de qualquer UI. Detalhe completo no item 26 de
 Um ponto para a etapa de pedidos, não para esta: **`updatedAt` vem sem fuso
 horário**. No carrinho não aparece; em `/orders`, data exibida sem `Z` é lida
 como hora local.
+
+## ✅ Passo 4 — feito (2026-07-30)
+
+A página `/cart` e o contador no header, fechando a etapa 5a. **316 testes unit
+(237 node + 79 jsdom) + 23 smoke**, `typecheck` e `lint` limpos.
+
+### Onde o carrinho é lido — `lib/cart/current-cart.ts`
+
+Arquivo novo, não previsto na lista acima: a decisão do `cache()` precisava de
+um lugar, e `lib/api/cart.ts` não podia ser ele — o módulo recebe o token por
+parâmetro justamente para não importar `next/headers` e continuar testável fora
+de um request. Então este é o único ponto que transforma cookie em carrinho:
+
+| Função | Falha do upstream | Quem usa |
+|---|---|---|
+| `getCurrentCart()` (memoizada) | **propaga** — em `/cart` o carrinho é a página, e um vazio silencioso seria mentira | `cart/page.tsx` |
+| `safeCartItemCount()` | **engole**, devolve 0 | `SiteHeader` |
+
+Verificado ao vivo: `/` e `/cart` logados mostram `aria-label="Carrinho, 2 itens"`,
+deslogado mostra só `"Carrinho"` apontando para `/login?next=%2Fcart`, e `/cart`
+anônimo devolve **307** para o login (middleware).
+
+### Decisões do passo 4
+
+| Ponto | Escolha | Motivo |
+|---|---|---|
+| Quantidade durante a mutação | **Linha inteira esmaecida e travada** (`aria-busy`), sem valor otimista | O `PATCH` devolve o carrinho novo, mas quem re-renderiza é o servidor. Mostrar "3" ao lado de um subtotal de 2 seria pior que esperar o round-trip. `useTransition` mantém o bloqueio até o `router.refresh()` pousar — nada destrava sobre número velho. |
+| Dois caminhos de remoção | **Stepper no 1 (PATCH 0)** *e* **✕ na linha (DELETE)** | O stepper cumpre o contrato (`minimum: 0`) e é o gesto natural descendo; o ✕ tira a linha inteira **numa chamada** — por ele, uma linha de 3 custaria 3 cliques e 3 round-trips. Os dois botões têm o **mesmo rótulo** quando a quantidade é 1, o que está certo: fazem a mesma coisa. |
+| CTA do checkout | **Desabilitado**, com legenda | `/checkout` só existe na 5b. Botão que dá 404 é pior que um que avisa — mesma regra que segura "Meus pedidos" fora do menu de conta. |
+| Linha indisponível | Badge + "+" desabilitado, remoção livre | Estoque acaba com o livro no carrinho. Pedir mais só renderia um 409; a revalidação de verdade é da 5b. |
+| Sessão que morre entre middleware e render | `redirect` para o login, por `isSessionProblem` | Não é um bare `status === 401`: o `/error` do Spring veste 401 sobre um crash, e mandar alguém ao login por causa de falha de servidor esconderia o problema. |
+| `/cart` em buscadores | `robots: noindex` | É o carrinho privado de um cliente. |
+| Links com cara de botão | `<Link className={buttonVariants(...)}>` | Mesma decisão do card, agora também no ícone do header, no estado vazio e no "Continuar comprando": o elemento navega, então tem que soar como link. De quebra, três avisos `nativeButton` a menos. |
