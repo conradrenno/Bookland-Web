@@ -1,9 +1,9 @@
-import { ShoppingBag } from "lucide-react";
 import Link from "next/link";
 import { Suspense } from "react";
 
 import { SearchBar } from "@/components/catalog/search-bar";
 import { AccountMenu } from "@/components/layout/account-menu";
+import { CartButton } from "@/components/layout/cart-button";
 import { CategoriesMenu } from "@/components/layout/categories-menu";
 import { HeaderShell } from "@/components/layout/header-shell";
 import { MobileNav } from "@/components/layout/mobile-nav";
@@ -12,6 +12,7 @@ import { Button } from "@/components/ui/button";
 import { listCategories } from "@/lib/api/categories";
 import type { CategoryViewModel } from "@/lib/api/types";
 import { getCurrentUser } from "@/lib/auth/server";
+import { safeCartItemCount } from "@/lib/cart/current-cart";
 import { cn } from "@/lib/utils";
 
 /**
@@ -21,7 +22,13 @@ import { cn } from "@/lib/utils";
  * the render, and hands both to the small client islands that need interaction.
  */
 export async function SiteHeader() {
-  const [categories, user] = await Promise.all([safeCategories(), getCurrentUser()]);
+  // The cart read is memoised (`current-cart.ts`), so on `/cart` the page and
+  // this badge share one upstream call instead of making two.
+  const [categories, user, cartCount] = await Promise.all([
+    safeCategories(),
+    getCurrentUser(),
+    safeCartItemCount(),
+  ]);
 
   return (
     <HeaderShell>
@@ -55,18 +62,7 @@ export async function SiteHeader() {
         </Suspense>
 
         <div className="ml-auto flex items-center gap-1 sm:ml-0">
-          <Button
-            variant="ghost"
-            size="icon"
-            aria-label="Carrinho"
-            className={ON_SURFACE_GHOST}
-            // Anonymous visitors are bounced to sign in and sent back, since the
-            // cart endpoint requires a token. The item counter arrives with the
-            // cart itself in stage 5 (decided with the owner, 2026-07-29).
-            render={<Link href={user ? "/cart" : "/login?next=%2Fcart"} />}
-          >
-            <ShoppingBag aria-hidden />
-          </Button>
+          <CartButton count={cartCount} signedIn={user !== null} />
 
           {user ? (
             <AccountMenu user={user} />
