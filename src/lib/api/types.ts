@@ -200,7 +200,15 @@ export interface UpdateCartItemRequest {
   quantity: number;
 }
 
-export type PaymentMethod = "CREDIT_CARD" | "DEBIT_CARD" | "PAYPAL" | "PIX";
+/**
+ * The enum as a runtime list, because two places need to *iterate* it: the
+ * checkout's route handler, which refuses anything outside it before calling
+ * upstream, and the method picker. Deriving the type from the tuple keeps the
+ * two from drifting apart.
+ */
+export const PAYMENT_METHODS = ["PIX", "CREDIT_CARD", "DEBIT_CARD", "PAYPAL"] as const;
+
+export type PaymentMethod = (typeof PAYMENT_METHODS)[number];
 
 export interface CheckoutRequest {
   paymentMethod: PaymentMethod;

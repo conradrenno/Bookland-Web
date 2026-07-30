@@ -56,8 +56,13 @@ export const ErrorCodes = {
    * 404 when the customer has no cart row at all — distinct from an empty one.
    * `GET /cart` creates it on demand, so this only surfaces when a mutation is
    * the customer's very first cart call, or after the cart was dropped.
+   *
+   * Also what **checkout** answers for an empty cart (verified 2026-07-30) —
+   * not a 409, and even when `GET /cart` is happily returning `items: []`.
    */
   CART_NOT_FOUND: "CART_NOT_FOUND",
+  /** 404 from `GET /orders/{orderId}` for an id that does not exist. */
+  ORDER_NOT_FOUND: "ORDER_NOT_FOUND",
 
   // --- server (500) ---------------------------------------------------------
   INTERNAL_ERROR: "INTERNAL_ERROR",
