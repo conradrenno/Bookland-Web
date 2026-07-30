@@ -12,6 +12,14 @@ import { getCurrentCart } from "@/lib/cart/current-cart";
 /** Where an unusable session is sent — the same target the header's icon uses. */
 const SIGN_IN_PATH = "/login?next=%2Fcart";
 
+/** `?motivo=estoque` — set by the checkout when the upstream refuses on stock. */
+const OUT_OF_STOCK_REASON = "estoque";
+
+interface CartPageProps {
+  /** Only `motivo` is read; anything else in the query string is ignored. */
+  searchParams: Promise<{ motivo?: string | string[] }>;
+}
+
 export const metadata: Metadata = {
   title: "Carrinho",
   // Nothing here belongs in an index: it is one customer's private cart.
@@ -26,8 +34,8 @@ export const metadata: Metadata = {
  * change ends in `router.refresh()` and the numbers come back down from here,
  * which is also what keeps the header badge honest (docs/specs/18-cart.md).
  */
-export default async function CartPage() {
-  const cart = await loadCart();
+export default async function CartPage({ searchParams }: CartPageProps) {
+  const [cart, params] = await Promise.all([loadCart(), searchParams]);
   const itemCount = cartItemCount(cart);
 
   return (
@@ -40,6 +48,20 @@ export default async function CartPage() {
           </p>
         )}
       </header>
+
+      {params.motivo === OUT_OF_STOCK_REASON && (
+        // The checkout sends people here when the upstream refuses on stock. It
+        // cannot say which book — the 409 carries the ids only inside an English
+        // `detail` — but the lines below are already marked "Indisponível", so
+        // this only has to explain why they are back and that nothing was paid.
+        <p
+          role="status"
+          className="mb-6 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          Um item ficou indisponível e o pedido não foi concluído — nada foi cobrado. Ajuste ou
+          remova os itens marcados e tente novamente.
+        </p>
+      )}
 
       {cart.items.length === 0 ? (
         <EmptyCart />
