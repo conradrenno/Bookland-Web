@@ -65,6 +65,7 @@ cancelamento.
 ```
 lib/api/orders.ts             checkout / getOrder
 lib/api/orders.test.ts        MSW: feliz + 409 de estoque + 404 de carrinho vazio
+lib/api/payments.ts           getOrderPayment (só leitura, para a página do pedido)
 lib/api/bff-mutate.ts         helper genérico extraído de cart-client.ts
 lib/api/checkout-client.ts    browser → POST /api/cart/checkout
 app/api/cart/checkout/route.ts          POST → checkout
@@ -80,6 +81,7 @@ components/checkout/payment-fields.tsx       os campos decorativos por método
 components/checkout/order-review.tsx         itens e total, só leitura
 components/orders/order-status-badge.tsx     rótulo pt-BR + cor
 components/orders/order-items.tsx            linhas do pedido (sem controles)
+components/orders/order-payment.tsx          método + status do pagamento
 components/orders/status-timeline.tsx        statusHistory em ordem
 
 lib/format.ts                 (alterado) parseApiDateTime — data sem fuso
@@ -98,10 +100,24 @@ nível e os dois clientes passam a chamá-lo. Sem cópia.
 |---|---|---|
 | `checkout(token, paymentMethod)` | `POST /api/v1/cart/checkout` | `OrderViewModel` |
 | `getOrder(token, orderId)` | `GET /api/v1/orders/{orderId}` | `OrderViewModel` |
+| `getOrderPayment(token, orderId)` | `GET /api/v1/payments/order/{orderId}` | `PaymentViewModel` |
 
 `CheckoutRequest`, `OrderViewModel`, `OrderItemViewModel`,
-`StatusTransitionViewModel` e `PaymentMethod` **já existem** em `types.ts` — o
-contrato foi mapeado inteiro na etapa 1.
+`StatusTransitionViewModel`, `PaymentViewModel` e `PaymentMethod` **já existem**
+em `types.ts` — o contrato foi mapeado inteiro na etapa 1.
+
+### Por que o pagamento entra (README do backend, 2026-07-30)
+
+`GET /payments/order/{orderId}` é **autenticado, não admin** — o cliente pode ler
+o próprio pagamento. Sem isso, o método que ele acabou de escolher **some da
+tela**: o `OrderViewModel` não traz `paymentMethod` em campo nenhum. A página do
+pedido pede os dois em paralelo e mostra "Pago com PIX · aprovado".
+
+É exatamente o papel de **agregador** que o BFF tem por decisão do dono
+([01](01-architecture-bff.md)) — e o único caso da etapa em que ele compõe algo.
+Falha do pagamento **esconde o bloco**, não derruba a página: mesmo precedente do
+`safeCategories()` e do badge do carrinho. Custa uma chamada a mais por pageview
+de pedido, num lugar que não é hot path.
 
 **Um código novo para o catálogo:** `ORDER_NOT_FOUND` (404), que aparece no
 `getOrder` de um id que não existe. Copy: "Pedido não encontrado." — embora a
@@ -167,7 +183,8 @@ Server Component: `getOrder()`, `notFound()` no 404 e no id que não é UUID
 tratado como "não encontrado" para não confirmar a existência do pedido alheio.
 
 Mostra: número curto do pedido (8 primeiros caracteres do UUID), data,
-`OrderStatusBadge`, itens com capa/título/quantidade/preço congelado, total, e a
+`OrderStatusBadge`, itens com capa/título/preço **congelado no checkout**
+(o backend congela preço, título e capa — README), total, forma de pagamento e a
 timeline do `statusHistory`. Nenhuma ação — cancelar é da etapa 6.
 
 ### Mapa de status — `lib/orders/status.ts`
@@ -184,7 +201,14 @@ Puro e testado à parte, porque a etapa 6 vai usar o mesmo mapa na lista:
 | `PAYMENT_FAILED` | Pagamento não aprovado | vermelho |
 
 O campo `cancelável` do mapa fica **declarado mas sem uso nesta etapa** — é o que
-a etapa 6 consome. `CONFIRMED` é cancelável: verificado ao vivo.
+a etapa 6 consome. Deixou de ser palpite: o README do backend diz que se cancela
+**de `AWAITING_PAYMENT` ou `CONFIRMED`**, e que cancelar um `CONFIRMED` dispara
+**restauração de estoque + estorno automático**. Bate com o `DELETE` que rodei
+ao vivo. Os demais status não são canceláveis.
+
+`PaymentStatus` ganha rótulos junto, porque a página mostra o pagamento:
+`PENDING` "processando", `APPROVED` "aprovado", `DECLINED` "não aprovado",
+`REFUNDED` "estornado" — este último é o que aparece depois de um cancelamento.
 
 ## Data sem fuso — resolver aqui
 
@@ -227,11 +251,24 @@ Seguindo [10-testing.md](10-testing.md):
   (troca de método troca os campos), `PaymentFields` (**nenhum `autocomplete` de
   cartão** e nada é enviado), `OrderStatusBadge`, `StatusTimeline`.
 - **smoke** — estender `live-contract.smoke.test.ts`: adicionar → checkout →
-  `status CONFIRMED` → `GET /orders/{id}` devolve o mesmo pedido → carrinho ficou
-  vazio → checkout de novo dá `404 CART_NOT_FOUND`.
+  `status CONFIRMED` → `GET /orders/{id}` devolve o mesmo pedido → o pagamento
+  existe e é `APPROVED` → carrinho ficou vazio → checkout de novo dá
+  `404 CART_NOT_FOUND`.
 
 ## Verificado ao vivo (2026-07-30)
 
 Detalhe completo no item 27 de [09-contract-notes.md](09-contract-notes.md):
 checkout feliz, carrinho vazio, `paymentMethod` ausente e inválido, estoque
 zerado por trás do carrinho, pedido por id, id inexistente e cancelamento.
+
+**Falta uma sondagem, e agora dá para fazer:** o README revela uma **segunda
+conta semeada** — `joao@bookland.com` / `joao1234` (CUSTOMER). Com ela dá para
+fechar o que a [06](06-orders.md) deixou em aberto: o que responde `GET
+/orders/{id}` de um pedido **de outro cliente** — 403 ou 404? Muda o que a
+página faz. Enquanto não medimos, `/orders/[orderId]` trata **os dois como
+`notFound()`**, que é a postura segura: confirmar a existência do pedido alheio
+não ajuda ninguém. Rodar quando o dono reiniciar o Spring.
+
+Vale também usar a conta de cliente nos smoke daqui em diante: hoje eles correm
+como **admin**, que é o único perfil que passa por rotas que o storefront nunca
+toca. Comprar como cliente é o caminho que a app exercita de verdade.

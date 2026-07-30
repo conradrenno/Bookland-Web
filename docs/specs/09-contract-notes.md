@@ -693,7 +693,26 @@ subir e nenhum dos dois deveria alcançar o usuário.
 |---|---|
 | `DELETE /orders/{id}` cancela | ✅ e **funciona com `CONFIRMED`**, devolvendo o pedido com `status: "CANCELLED"` |
 | Detalhe só do dono; inexistente → 404 | ✅ `404 ORDER_NOT_FOUND` (código novo, catalogar) |
-| Histórico **ordenado por data decrescente** | ❌ **veio crescente** — `content[0]` é o pedido mais antigo. Ou o backend não ordena, ou ordena ao contrário. Trava na etapa 6; se persistir, ordenar no BFF. |
+| Histórico **ordenado por data decrescente** | ❌ **veio crescente** — `content[0]` é o pedido mais antigo |
+
+**📘 O README do backend (lido em 2026-07-30) explica duas dessas linhas:**
+
+1. **A ordenação decrescente nunca foi prometida ao cliente.** O README promete
+   "newest first" **só** em `GET /admin/orders`; a rota do cliente aparece como
+   "Order history (paginated)", sem ordem. Ou seja: não é bug, é ausência de
+   garantia. **Ordenar no BFF** na etapa 6 — e não contar com a ordem que vier.
+2. **Cancelamento sai do palpite.** "From `AWAITING_PAYMENT` or `CONFIRMED`; the
+   latter triggers stock restore and automatic refund." Confirma o `DELETE` que
+   rodei e explica o `REFUNDED` que a página do pedido pode exibir depois.
+
+**📘 E abre uma porta que a spec 19 aproveita:** `GET /payments/order/{orderId}`
+é **autenticado, não admin** — o cliente lê o próprio pagamento. Como o
+`OrderViewModel` **não traz `paymentMethod`**, é a única forma de mostrar na tela
+o método que o cliente acabou de escolher.
+
+**📘 Segunda conta semeada:** `joao@bookland.com` / `joao1234` (CUSTOMER), além do
+admin. Permite finalmente medir o acesso a pedido de outro cliente (403 × 404) e
+rodar os smoke pelo perfil que a app de fato usa.
 
 **⚪ Datas continuam sem fuso** (`"2026-07-30T13:01:34.4862"`), agora em campo
 **exibido**: `createdAt` do pedido e `changedAt` do histórico. É o item 3 dos
