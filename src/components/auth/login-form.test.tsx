@@ -83,11 +83,18 @@ describe("LoginForm", () => {
 
   it("sends one request even when the button is clicked twice", async () => {
     let calls = 0;
+    // Held open until the second click has happened, rather than for a fixed
+    // number of milliseconds: with a timer, a slow run lets the first request
+    // resolve first, the button re-enables, and the test fails for a reason
+    // that has nothing to do with the guard it is checking.
+    let release!: () => void;
+    const inFlight = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     server.use(
       http.post(LOGIN_ROUTE, async () => {
         calls += 1;
-        // Hold the response open so the second click lands mid-flight.
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await inFlight;
         return HttpResponse.json({ user: null });
       }),
     );
@@ -95,6 +102,7 @@ describe("LoginForm", () => {
 
     const user = await fillAndSubmit();
     await user.click(screen.getByRole("button", { name: "Entrando…" }));
+    release();
 
     await waitFor(() => expect(replace).toHaveBeenCalled());
     expect(calls).toBe(1);

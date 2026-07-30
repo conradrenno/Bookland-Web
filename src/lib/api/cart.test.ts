@@ -19,8 +19,9 @@ function cart(items: CartViewModel["items"] = []): CartViewModel {
     customerId: "eee6a6d1-b523-473d-b0e6-992ad0e30fa7",
     items,
     total: items.reduce((sum, item) => sum + item.subtotal, 0),
-    // No timezone suffix: that is what the API actually sends.
-    updatedAt: "2026-07-29T22:09:28.0627129",
+    // With the `Z`, as the API sends since the backend moved to `Instant`
+    // (2026-07-30). The nine decimals are Java's, and `new Date` truncates them.
+    updatedAt: "2026-07-30T19:55:56.993067Z",
   };
 }
 

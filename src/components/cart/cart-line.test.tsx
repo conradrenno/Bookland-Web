@@ -35,7 +35,7 @@ const cart = {
   customerId: "eee6a6d1-b523-473d-b0e6-992ad0e30fa7",
   items: [],
   total: 0,
-  updatedAt: "2026-07-29T22:09:28.0627129",
+  updatedAt: "2026-07-30T19:55:56.993067Z",
 };
 
 function renderLine(overrides: Partial<CartItemViewModel> = {}) {
@@ -155,10 +155,16 @@ describe("CartLine", () => {
     // `PATCH` on a line that vanished answers 404 BOOK_NOT_IN_CART, so a double
     // click on the removal step is a real error — not a harmless repeat.
     let calls = 0;
+    // Held until the second click has landed, not for a fixed 50ms — see the
+    // same guard's test in add-to-cart-button.test.tsx.
+    let release!: () => void;
+    const inFlight = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     server.use(
       http.patch(ITEM_ROUTE, async () => {
         calls += 1;
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await inFlight;
         return HttpResponse.json(cart);
       }),
     );
@@ -167,6 +173,7 @@ describe("CartLine", () => {
     const plus = screen.getByRole("button", { name: /Aumentar quantidade/ });
     await userEvent.click(plus);
     await userEvent.click(plus);
+    release();
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(calls).toBe(1);
