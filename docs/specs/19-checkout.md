@@ -58,7 +58,7 @@ cancelamento.
 | Sucesso | `router.push('/orders/{id}')` **+ `router.refresh()`** | O push leva ao pedido; o refresh é o que **zera o badge** do header, que continua sendo server-rendered. Sem ele, o ícone ficaria mostrando itens de um carrinho que já virou pedido. |
 | 409 de estoque | **Volta para `/cart`** com o motivo | Não dá para apontar a linha a partir do 409 (o `detail` é texto), mas o `GET /cart` já marca `available: false` no item exato. Devolver ao carrinho é mais honesto que listar nada. |
 | Status do pedido | **Exibe o que vier**, incluindo `PAYMENT_FAILED` | O gateway aprovou 8/8, mas não há prova de que nunca recusa. O que a UI **não** faz é oferecer "pagar de novo": não existe endpoint. |
-| Campos de pagamento | **Decorativos, por método**, com aviso curto | Pedido do dono em 2026-07-30 — a demo tem que parecer uma loja. Regras próprias na seção abaixo. |
+| Campos de pagamento | **Decorativos, por método, mas obrigatórios e validados** | Pedido do dono em 2026-07-30 — a demo tem que parecer uma loja, e o número tem que parecer um cartão. Regras próprias na seção abaixo. |
 
 ## Arquivos
 
@@ -78,6 +78,8 @@ app/(storefront)/orders/[orderId]/page.tsx   Server Component: o pedido
 components/checkout/checkout-form.tsx        "use client": método + envio + erro
 components/checkout/payment-method-picker.tsx  as quatro opções
 components/checkout/payment-fields.tsx       os campos decorativos por método
+lib/checkout/payment-schema.ts               zod por método (Luhn, validade, chave PIX)
+lib/checkout/payment-schema.test.ts
 components/checkout/order-review.tsx         itens e total, só leitura
 components/orders/order-status-badge.tsx     rótulo pt-BR + cor
 components/orders/order-items.tsx            linhas do pedido (sem controles)
@@ -134,30 +136,41 @@ esquerda, o resumo à direita.
 `PaymentMethodPicker` é um radio group com os quatro métodos do enum. A escolha
 troca os campos exibidos abaixo:
 
-| Método | Campos decorativos |
-|---|---|
-| `CREDIT_CARD` / `DEBIT_CARD` | Número, validade, CVV, nome impresso |
-| `PIX` | Chave PIX |
-| `PAYPAL` | E-mail da conta |
+| Método | Campos | Validação (RHF + zod, como em [16](16-auth-pages.md)) |
+|---|---|---|
+| `CREDIT_CARD` / `DEBIT_CARD` | Número | 16 dígitos, máscara `0000 0000 0000 0000`, **passa no Luhn** |
+| | Validade | `MM/AA`, mês 01–12, **no futuro** |
+| | CVV | 3 ou 4 dígitos |
+| | Nome impresso | dois nomes, só letras e espaço |
+| `PIX` | Chave | e-mail, CPF/telefone (11 dígitos) **ou** chave aleatória (UUID) |
+| `PAYPAL` | E-mail | formato de e-mail |
 
-**Regras que valem para todos eles**, e que a implementação não pode afrouxar:
+**Todos são obrigatórios** — decisão do dono em 2026-07-30: o número tem que
+*parecer* um cartão de verdade, e um campo que aceita qualquer coisa não parece.
+O formulário só envia com tudo válido, exatamente como uma loja real.
 
-1. **Aviso curto embaixo do bloco**, pedido do dono: uma linha explicando que é
-   simulação e que ninguém deve digitar dado real. Copy proposta —
-   *"Simulação: estes campos não são enviados a lugar nenhum. Não use dados
-   reais."*
-2. **Nunca saem da página.** O `POST` manda **só** `{ paymentMethod }`, que é o
-   único campo que a API tem. O estado morre no componente.
-3. **Nenhum `autocomplete` de pagamento.** Nada de `cc-number`, `cc-exp`,
+**Luhn, e o que fazer para não travar a demo.** Dígito verificador é o que separa
+"16 dígitos" de "número plausível" — mas 16 dígitos ao acaso reprovam no Luhn
+quase sempre, e quem estiver testando ficaria preso. Então o aviso obrigatório
+**também é a ajuda**:
+
+> *Simulação — use um número de teste, ex.: 4111 1111 1111 1111. Estes campos
+> não são enviados a lugar nenhum; não use dados reais.*
+
+Se na prática isso incomodar, tirar o Luhn é apagar uma linha do schema; o resto
+da validação continua de pé.
+
+**Três regras que não são de gosto, e a implementação não pode afrouxar:**
+
+1. **Nunca saem da página.** O `POST` manda **só** `{ paymentMethod }`, que é o
+   único campo que a API tem. O resto morre no componente — nem no `router`, nem
+   em `localStorage`, nem em log.
+2. **Nenhum `autocomplete` de pagamento.** Nada de `cc-number`, `cc-exp`,
    `cc-csc`: esses tokens fazem o navegador **oferecer o cartão de verdade** do
-   usuário para um campo decorativo. Vai `autoComplete="off"` e nomes neutros.
-4. **Não bloqueiam o envio.** Exigir preenchimento obrigaria a inventar um
-   cartão para comprar num campo que nada consome. Ficam opcionais, e o aviso
-   explica por quê.
-
-> Se o dono preferir que pareçam obrigatórios (mais "real", ao custo de forçar
-> dado falso), é trocar uma linha de validação — mas a decisão registrada é a
-> acima.
+   usuário para um campo de mentira. Vai `autoComplete="off"` e nomes neutros.
+   Vale o mesmo para a chave PIX, que pode ser CPF.
+3. **O aviso é obrigatório e fica junto dos campos**, não no rodapé da página:
+   quem está digitando tem que ler antes de digitar.
 
 ### Envio
 
@@ -246,10 +259,15 @@ Seguindo [10-testing.md](10-testing.md):
 - **node** — `orders.ts` com MSW (feliz, 409, 404), validação do route handler,
   `lib/orders/status.ts`, `parseApiDateTime` (com e sem offset, e o `Z` que já
   funciona).
-- **jsdom** — `CheckoutForm` (envia só `paymentMethod`; 409 leva ao carrinho;
-  duplo clique cria **um** pedido; 401 leva ao login), `PaymentMethodPicker`
-  (troca de método troca os campos), `PaymentFields` (**nenhum `autocomplete` de
-  cartão** e nada é enviado), `OrderStatusBadge`, `StatusTimeline`.
+- **jsdom** — `CheckoutForm` (envia só `paymentMethod` **e nada dos campos de
+  pagamento**; 409 leva ao carrinho; duplo clique cria **um** pedido; 401 leva ao
+  login), `PaymentMethodPicker` (troca de método troca os campos **e limpa os
+  anteriores**), `PaymentFields` (campo vazio barra o envio; número que reprova
+  no Luhn barra; validade no passado barra; **nenhum `autocomplete` de cartão**),
+  `OrderStatusBadge`, `StatusTimeline`.
+
+  O teste do corpo enviado é o mais importante da etapa: é ele que trava a regra
+  de que **nenhum dado de pagamento sai do navegador**.
 - **smoke** — estender `live-contract.smoke.test.ts`: adicionar → checkout →
   `status CONFIRMED` → `GET /orders/{id}` devolve o mesmo pedido → o pagamento
   existe e é `APPROVED` → carrinho ficou vazio → checkout de novo dá
