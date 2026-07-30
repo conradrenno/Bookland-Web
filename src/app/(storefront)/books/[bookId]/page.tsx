@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 
+import { AddToCartButton } from "@/components/cart/add-to-cart-button";
 import { BookCover } from "@/components/catalog/book-cover";
 import { RatingStars } from "@/components/catalog/rating-stars";
 import { Badge } from "@/components/ui/badge";
@@ -9,6 +10,7 @@ import { getBook } from "@/lib/api/books";
 import { isApiError } from "@/lib/api/errors";
 import type { BookViewModel } from "@/lib/api/types";
 import { isUuid } from "@/lib/api/uuid";
+import { isSignedIn } from "@/lib/auth/server";
 import { formatPrice } from "@/lib/format";
 
 const DETAIL_COVER_SIZES = "(min-width: 768px) 20rem, 60vw";
@@ -26,6 +28,7 @@ interface BookPageProps {
  */
 export default async function BookPage({ params }: BookPageProps) {
   const book = await loadBook((await params).bookId);
+  const signedIn = await isSignedIn();
 
   return (
     <article className="mx-auto w-full max-w-5xl px-4 py-8 sm:py-12">
@@ -57,13 +60,23 @@ export default async function BookPage({ params }: BookPageProps) {
             <RatingStars rating={book.avgRating} />
           </header>
 
-          <div className="flex flex-wrap items-center gap-3">
-            <p className="text-3xl font-semibold text-primary">{formatPrice(book.price)}</p>
-            {/* Availability, never the exact stock count: US-06 treats the
-                quantity as internal information. */}
-            <Badge variant={book.available ? "secondary" : "outline"}>
-              {book.available ? "Em estoque" : "Indisponível"}
-            </Badge>
+          <div className="space-y-4">
+            <div className="flex flex-wrap items-center gap-3">
+              <p className="text-3xl font-semibold text-primary">{formatPrice(book.price)}</p>
+              {/* Availability, never the exact stock count: US-06 treats the
+                  quantity as internal information. */}
+              <Badge variant={book.available ? "secondary" : "outline"}>
+                {book.available ? "Em estoque" : "Indisponível"}
+              </Badge>
+            </div>
+
+            <AddToCartButton
+              bookId={book.id}
+              available={book.available}
+              signedIn={signedIn}
+              size="lg"
+              className="sm:max-w-64"
+            />
           </div>
 
           {book.synopsis && (

@@ -9,6 +9,7 @@ import { Button } from "@/components/ui/button";
 import { parseBookSearchParams, searchBooks, type RawSearchParams } from "@/lib/api/books";
 import { listCategories } from "@/lib/api/categories";
 import { hasActiveFilters } from "@/lib/catalog/search-href";
+import { isSignedIn } from "@/lib/auth/server";
 
 export const metadata: Metadata = {
   title: "Catálogo",
@@ -33,8 +34,14 @@ interface CatalogPageProps {
 export default async function CatalogPage({ searchParams }: CatalogPageProps) {
   const params = parseBookSearchParams(await searchParams);
 
-  // Independent calls — the filter bar must not wait for the listing.
-  const [books, categories] = await Promise.all([searchBooks(params), listCategories()]);
+  // Independent calls — the filter bar must not wait for the listing. The
+  // session only decides whether each card's CTA buys or sends the visitor to
+  // sign in; it is a cookie read, not a request.
+  const [books, categories, signedIn] = await Promise.all([
+    searchBooks(params),
+    listCategories(),
+    isSignedIn(),
+  ]);
 
   return (
     <div className="mx-auto w-full max-w-6xl px-4 py-8 sm:py-12">
@@ -58,7 +65,11 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
           <ul className="mt-8 grid grid-cols-2 gap-x-5 gap-y-9 sm:grid-cols-3 lg:grid-cols-4">
             {books.content.map((book, index) => (
               <li key={book.id}>
-                <BookCard book={book} priority={index < PRIORITY_CARDS} />
+                <BookCard
+                  book={book}
+                  signedIn={signedIn}
+                  priority={index < PRIORITY_CARDS}
+                />
               </li>
             ))}
           </ul>

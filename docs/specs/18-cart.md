@@ -180,6 +180,7 @@ painel próprio, capa ocupando **parte** dele, dados dentro do painel e o botão
 | Revelar no hover | `@media (hover: hover)` + `group-focus-within` | Sem a media query, o botão **nunca** aparece em touch, onde não existe hover. Sem o `focus-within`, o teclado não alcança. Em telas de toque ele fica permanentemente visível. |
 | Custo em JS | Card continua **Server Component** | O hover é CSS (`group-hover`), não estado. Só o `<AddToCartButton>` leva `"use client"` — N botões pequenos, não N cards hidratados. |
 | Deslogado | Botão vira link para `/login?next=…` | Mesma regra do ícone do carrinho na [13](13-common_header.md): `/cart` exige token. Sem sessão, clicar leva ao login e volta. |
+| Esse link | `<Link>` com `buttonVariants`, **não** `<Button render={<Link/>}>` | O Base UI ou avisa que o elemento não é um `<button>` nativo, ou — com `nativeButton={false}` — carimba `role="button"` na âncora. O elemento **navega**, então o leitor de tela tem de ouvir "link". `buttonVariants` dá a aparência sem a semântica errada. |
 
 ### O que fica de fora, e por quê
 

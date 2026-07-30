@@ -3,6 +3,17 @@ import Image from "next/image";
 import { resolveCoverUrl } from "@/lib/api/covers";
 import { cn } from "@/lib/utils";
 
+/**
+ * How the image sits in its 2:3 frame.
+ *
+ * `cover` fills the frame and **crops** whatever does not fit — right for the
+ * detail page, where the cover is the hero and a sliver off the edge is
+ * invisible. `contain` fits the whole image inside and lets the frame show
+ * around it, which is what the catalogue card wants: book covers are not all
+ * 2:3, and cropping a row of them shaves the title off some and not others.
+ */
+export type CoverFit = "cover" | "contain";
+
 interface BookCoverProps {
   coverImageUrl?: string;
   title: string;
@@ -10,6 +21,7 @@ interface BookCoverProps {
   sizes: string;
   /** Set on above-the-fold covers only; marking every card defeats the point. */
   priority?: boolean;
+  fit?: CoverFit;
   className?: string;
 }
 
@@ -20,13 +32,25 @@ interface BookCoverProps {
  * shifting as images load, and it is why the placeholder is a styled panel
  * rather than a missing element (docs/specs/03-catalog.md).
  */
-export function BookCover({ coverImageUrl, title, sizes, priority, className }: BookCoverProps) {
+export function BookCover({
+  coverImageUrl,
+  title,
+  sizes,
+  priority,
+  fit = "cover",
+  className,
+}: BookCoverProps) {
   const source = resolveCoverUrl(coverImageUrl);
+  const contained = fit === "contain";
 
   return (
     <div
       className={cn(
-        "relative aspect-2/3 w-full overflow-hidden rounded-md bg-muted shadow-sm ring-1 ring-border/60",
+        "relative aspect-2/3 w-full overflow-hidden rounded-md",
+        // A contained image does not reach the edges, so a border and a shadow
+        // would outline empty space rather than the cover. The card panel
+        // behind it supplies both.
+        contained ? "bg-transparent" : "bg-muted shadow-sm ring-1 ring-border/60",
         className,
       )}
     >
@@ -37,7 +61,9 @@ export function BookCover({ coverImageUrl, title, sizes, priority, className }: 
           fill
           sizes={sizes}
           priority={priority}
-          className="object-cover"
+          className={cn(
+            contained ? "object-contain drop-shadow-sm" : "object-cover",
+          )}
         />
       ) : (
         <CoverPlaceholder title={title} />
