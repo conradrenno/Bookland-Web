@@ -604,11 +604,100 @@ estado pendente no componente.
    pedidos**, onde a data é exibida: `new Date()` vai ler como **hora local**.
 4. **`cart.id` muda** quando o carrinho fica vazio e recebe item de novo; estável
    enquanto tem conteúdo. Nada no front deve usá-lo como chave.
-5. **A seed não tem livro sem estoque** — o caminho `available: false` na linha
-   do carrinho segue sem verificação.
+5. ~~**A seed não tem livro sem estoque**~~ — verificado no item 27: dá para
+   fabricar o caso com `PATCH /books/{id} {"stockQuantity":0}` como admin, e a
+   linha do carrinho **passa a vir `available: false`** sem precisar recarregar
+   nada além do `GET /cart`.
 6. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
    teste (nem smoke) pode fixar um UUID — todos descobrem o livro via
    `GET /books`. Vale para qualquer id copiado à mão para um teste.
+
+## 27. Checkout e pedidos: comportamento real — NOVO (2026-07-30)
+
+Levantado ao vivo com a conta admin **antes** de escrever a spec da etapa 5b,
+pela mesma razão dos itens 25 e 26. A [05-cart-checkout.md](05-cart-checkout.md)
+descreve o checkout a partir da **story**, e a story erra em três pontos.
+
+**🔴 O pedido nasce `CONFIRMED`, já pago — não existe etapa de pagamento.**
+
+A story fala em "status PENDING" e a spec 05 apostou em `AWAITING_PAYMENT`. O que
+acontece de verdade é que `POST /cart/checkout` **cobra na hora**: devolve um
+`OrderViewModel` com `status: "CONFIRMED"` e um `statusHistory` que **já tem** a
+transição `AWAITING_PAYMENT → CONFIRMED`. O `AWAITING_PAYMENT` existe por um
+instante dentro da transação e nunca é observável pelo cliente.
+
+```
+POST /cart/checkout {"paymentMethod":"PIX"}
+→ 200 { status: "CONFIRMED",
+        statusHistory: [{ fromStatus:"AWAITING_PAYMENT", toStatus:"CONFIRMED", … }] }
+
+GET /payments/order/{orderId}
+→ 200 { status:"APPROVED", method:"PIX", gatewayTransactionId:"SIM-1759835a-…" }
+```
+
+O gateway é **simulado** (prefixo `SIM-`) e aprovou **8 de 8** tentativas. Não dá
+para provar que nunca recusa, então a UI **exibe o `status` que vier** e sabe
+desenhar `PAYMENT_FAILED` — mas não constrói fluxo de "pagar de novo", que não
+existe endpoint para fazer. Consequência prática: **não há tela de pagamento**;
+`paymentMethod` é a única coisa que o backend recebe (sem cartão, sem endereço).
+
+**🔴 Carrinho vazio no checkout responde `404 CART_NOT_FOUND`, não 409.**
+
+E vale mesmo para carrinho que **existe e ficou vazio** (adicionar + remover):
+
+```
+POST /cart/checkout  (carrinho sem itens)  → 404 CART_NOT_FOUND
+GET  /cart           (mesmo instante)      → 200 {items: [], total: 0}
+```
+
+Os dois endpoints discordam sobre o mesmo estado. A copy que já temos para
+`CART_NOT_FOUND` ("Seu carrinho está vazio.") serve, mas a UI não deve depender
+disso: quem impede o caso é a própria página, que não oferece o CTA sem itens.
+
+**🔵 `INSUFFICIENT_STOCK` continua não existindo.** A suspeita do item 26 (de que
+ele seria da revalidação do checkout) **não se confirma**: forçando o caso —
+livro no carrinho, admin zera o estoque, checkout — vem outra vez
+`409 CART_ITEM_UNAVAILABLE`. O código segue no catálogo sem nunca ter aparecido.
+
+**🔴 Os itens problemáticos do 409 só existem dentro do `detail`, em inglês.**
+
+```
+409 { code:"CART_ITEM_UNAVAILABLE",
+      detail:"Insufficient stock for books: [175c35f7-0e36-4bbe-a43d-6402caef0cbf]" }
+```
+
+A spec 05 prometia "409 com os itens problemáticos; UI lista e aponta o que
+remover". **Não há campo estruturado** — nem `errors`, nem lista de ids. Fazer
+parse do `detail` violaria a regra de nunca ramificar por mensagem
+([15](15-code-conventions.md)), e ele é documentado como reword-able.
+
+**Não precisa:** o `GET /cart` já marca `available: false` na linha exata assim
+que o estoque some (verificado). Então o caminho do 409 é *devolver o cliente ao
+carrinho* — que se explica sozinho, com a copy e o "+" bloqueado que a etapa 5a
+já entregou.
+
+**🔵 Validação do `paymentMethod`: dois códigos diferentes para o mesmo campo.**
+
+| Corpo | Resposta |
+|---|---|
+| `{}` (ausente) | `400 VALIDATION_ERROR` com `errors.paymentMethod: ["must not be null"]` |
+| `{"paymentMethod":"BITCOIN"}` | `400 MALFORMED_REQUEST`, sem dizer qual campo |
+
+O segundo é o enum quebrando na desserialização — mesma classe dos itens 24 e 26.
+Como o valor sempre sai de um seletor nosso, o BFF valida contra a lista antes de
+subir e nenhum dos dois deveria alcançar o usuário.
+
+**🔵 Pedidos — o que confere e o que não confere com a [06](06-orders.md):**
+
+| Afirmação da spec 06 | Ao vivo |
+|---|---|
+| `DELETE /orders/{id}` cancela | ✅ e **funciona com `CONFIRMED`**, devolvendo o pedido com `status: "CANCELLED"` |
+| Detalhe só do dono; inexistente → 404 | ✅ `404 ORDER_NOT_FOUND` (código novo, catalogar) |
+| Histórico **ordenado por data decrescente** | ❌ **veio crescente** — `content[0]` é o pedido mais antigo. Ou o backend não ordena, ou ordena ao contrário. Trava na etapa 6; se persistir, ordenar no BFF. |
+
+**⚪ Datas continuam sem fuso** (`"2026-07-30T13:01:34.4862"`), agora em campo
+**exibido**: `createdAt` do pedido e `changedAt` do histórico. É o item 3 dos
+menores do 26 saindo do "não incomoda hoje" — decidir na 5b como tratar.
 
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review

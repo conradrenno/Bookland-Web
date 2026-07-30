@@ -13,6 +13,9 @@ Regras (story):
 - Só pedidos do cliente autenticado (isolamento por `customerId`, feito no
   backend via token).
 - Paginado, ordenado por data decrescente.
+  > ❌ **Não confere (2026-07-30):** o histórico veio em ordem **crescente** —
+  > `content[0]` é o pedido mais antigo. Ordenar no BFF se persistir. Item 27 de
+  > [09-contract-notes.md](09-contract-notes.md).
 
 UI: lista de cards — nº do pedido (id curto), data (pt-BR), `StatusBadge`,
 total (`R$`), qtd. de itens. Vazio: "você ainda não fez pedidos".
@@ -63,8 +66,8 @@ UI:
 
 | `OrderStatus` | Rótulo pt-BR | Cor | Cancelável? |
 |---|---|---|---|
-| `AWAITING_PAYMENT` | Aguardando pagamento | amber | sim |
-| `CONFIRMED` | Confirmado | blue | sim (até enviar) |
+| `AWAITING_PAYMENT` | Aguardando pagamento | amber | sim (nunca observado: o checkout já entrega `CONFIRMED`) |
+| `CONFIRMED` | Confirmado | blue | **sim — verificado ao vivo em 2026-07-30** |
 | `SHIPPED` | Enviado | indigo | não |
 | `DELIVERED` | Entregue | green | não |
 | `CANCELLED` | Cancelado | zinc | — |
