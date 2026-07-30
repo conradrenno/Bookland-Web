@@ -186,7 +186,13 @@ export interface CartViewModel {
 
 export interface AddCartItemRequest {
   bookId: UUID;
-  quantity?: number;
+  /**
+   * Required in practice despite being optional in the OpenAPI, and with no
+   * server-side default: upstream binds it to a primitive `int`, so omitting it
+   * or sending `null` fails deserialisation with `400 MALFORMED_REQUEST`.
+   * `addCartItem` always sends it. See 09-contract-notes.md item 26.
+   */
+  quantity: number;
 }
 
 export interface UpdateCartItemRequest {

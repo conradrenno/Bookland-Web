@@ -58,6 +58,11 @@ UI:
   ausente), título, autores, preço (pt-BR `R$`), estrelas (`avgRating`), badge
   "Indisponível" quando `!available`. Ordem visual segue o style brief:
   capa → título → autor → preço → CTA.
+
+  > **Redesenhado na etapa 5a** (dono, 2026-07-29): painel próprio, capa
+  > **contida** numa área de altura fixa em vez de sangrada e cortada, e o CTA
+  > "Adicionar ao carrinho" revelado no hover. Estrutura e as razões em
+  > [18-cart.md](18-cart.md).
 - Filtros: categoria (do `GET /categories`), faixa de preço, `sort`.
 - Estados: vazio ("nenhum livro encontrado"), erro, paginação.
 

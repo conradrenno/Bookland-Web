@@ -39,8 +39,19 @@ export const ErrorCodes = {
   CATEGORY_NOT_FOUND: "CATEGORY_NOT_FOUND",
   EMAIL_ALREADY_EXISTS: "EMAIL_ALREADY_EXISTS",
   DUPLICATE_REVIEW: "DUPLICATE_REVIEW",
+  /**
+   * 409 on every cart write that would exceed stock — whether the book ran out
+   * or the requested amount is simply more than exists. Verified 2026-07-29:
+   * `POST` and `PATCH` both answer this, never `INSUFFICIENT_STOCK`.
+   */
   CART_ITEM_UNAVAILABLE: "CART_ITEM_UNAVAILABLE",
+  /**
+   * Never observed on the cart, despite the name. Presumably reserved for the
+   * checkout's re-validation; kept catalogued so a branch on it type-checks.
+   */
   INSUFFICIENT_STOCK: "INSUFFICIENT_STOCK",
+  /** 404 from `PATCH /cart/items/{bookId}` for a book the cart does not hold. */
+  BOOK_NOT_IN_CART: "BOOK_NOT_IN_CART",
 
   // --- server (500) ---------------------------------------------------------
   INTERNAL_ERROR: "INTERNAL_ERROR",
