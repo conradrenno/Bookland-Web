@@ -86,7 +86,6 @@ components/orders/order-items.tsx            linhas do pedido (sem controles)
 components/orders/order-payment.tsx          método + status do pagamento
 components/orders/status-timeline.tsx        statusHistory em ordem
 
-lib/format.ts                 (alterado) parseApiDateTime — data sem fuso
 lib/api/cart-client.ts        (alterado) passa a usar bff-mutate.ts
 ```
 
@@ -225,19 +224,31 @@ ao vivo. Os demais status não são canceláveis.
 
 ## Data sem fuso — resolver aqui
 
-`createdAt` e `changedAt` chegam como `"2026-07-30T13:01:34.4862"`: sem `Z`,
-sem offset. É o item 3 dos "menores" do 26, que deixa de ser inofensivo agora que
-a data **aparece na tela**.
+**✅ Resolvido no backend, antes de a etapa começar (2026-07-30).** As datas
+chegavam como `"2026-07-30T13:01:34.4862"` — sem `Z` e sem offset, ou seja, sem
+dizer que instante eram. O dono trocou `LocalDateTime` por **`Instant`** em todos
+os módulos, e agora vem assim:
 
-O problema: `new Date("…13:01:34")` é lido como **hora local do runtime**. No
-servidor isso é o fuso do host; no navegador, o do visitante. `format.ts` já fixa
-a exibição em `America/Sao_Paulo`, então um host em UTC renderizaria 10:01.
+```
+"createdAt": "2026-07-30T19:55:57.117193400Z"
+```
 
-**Correção proposta:** `parseApiDateTime()` em `format.ts` — quando a string não
-traz offset, assume o fuso da loja e anexa `-03:00`. O Brasil não tem horário de
-verão desde 2019, então o offset de São Paulo é constante; se voltar a ter, esta
-é a linha a mexer. A correção certa é o backend mandar o offset — fica registrado
-no item 27 para o dono.
+Conferido campo a campo logo depois de subir: **9 campos de data em 5 respostas
+(carrinho, pedido, histórico, pagamento, usuário), todos com `Z`, todos como
+string** — não epoch — e o instante batendo com o relógio real, sem
+deslocamento de 3 horas na conversão. As 9 casas decimais que o `Instant` do Java
+emite não incomodam: o JS trunca para milissegundos.
+
+**Consequência para esta etapa: o `parseApiDateTime()` que estava planejado sai
+do escopo.** Ele existia só para anexar `-03:00` ao que não tinha fuso, embutindo
+a premissa de que o relógio do backend é o da loja. Com instantes de verdade,
+`new Date()` basta e o `formatDate`/`formatDateTime` — que já fixam a exibição em
+`America/Sao_Paulo` — passam a mostrar o mesmo horário para todo mundo, servidor
+e navegador inclusive. Some junto o risco de mismatch de hidratação.
+
+**Fica no lugar dele uma asserção nos smoke**, que é o que garante que nenhum
+módulo ficou para trás e que a regressão apareça na hora: todo campo de data de
+toda resposta tem que casar com `/(Z|[+-]\d{2}:?\d{2})$/`.
 
 ## Erros → UI
 
@@ -257,8 +268,7 @@ códigos ganham copy nesta etapa:
 Seguindo [10-testing.md](10-testing.md):
 
 - **node** — `orders.ts` com MSW (feliz, 409, 404), validação do route handler,
-  `lib/orders/status.ts`, `parseApiDateTime` (com e sem offset, e o `Z` que já
-  funciona).
+  `lib/orders/status.ts`.
 - **jsdom** — `CheckoutForm` (envia só `paymentMethod` **e nada dos campos de
   pagamento**; 409 leva ao carrinho; duplo clique cria **um** pedido; 401 leva ao
   login), `PaymentMethodPicker` (troca de método troca os campos **e limpa os
@@ -271,7 +281,9 @@ Seguindo [10-testing.md](10-testing.md):
 - **smoke** — estender `live-contract.smoke.test.ts`: adicionar → checkout →
   `status CONFIRMED` → `GET /orders/{id}` devolve o mesmo pedido → o pagamento
   existe e é `APPROVED` → carrinho ficou vazio → checkout de novo dá
-  `404 CART_NOT_FOUND`.
+  `404 CART_NOT_FOUND`. **Mais a asserção de fuso** descrita acima, varrendo as
+  respostas em vez de conferir campo a campo — assim ela cobre campo novo que
+  apareça depois.
 
 ## Verificado ao vivo (2026-07-30)
 

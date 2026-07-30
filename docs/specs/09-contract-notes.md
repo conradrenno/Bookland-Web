@@ -598,10 +598,8 @@ estado pendente no componente.
    carrinho atualizado, que é justamente o que evita um `GET` de volta.
 2. **`bookId` não-UUID no corpo → `400 MALFORMED_REQUEST`** (falha de
    desserialização), não `INVALID_PARAMETER` com `errors.bookId`.
-3. **`updatedAt` vem sem fuso**: `"2026-07-29T22:09:28.0627129"` — sem `Z` e sem
-   offset, com 7 casas decimais. `ISODateTime` no `types.ts` documenta o formato
-   com `Z`. Não incomoda hoje (o carrinho não exibe data), mas **vai incomodar em
-   pedidos**, onde a data é exibida: `new Date()` vai ler como **hora local**.
+3. ~~**`updatedAt` vem sem fuso**~~ ✅ **RESOLVIDO pelo dono em 2026-07-30** —
+   `LocalDateTime` virou `Instant` em todos os módulos. Ver o fim do item 27.
 4. **`cart.id` muda** quando o carrinho fica vazio e recebe item de novo; estável
    enquanto tem conteúdo. Nada no front deve usá-lo como chave.
 5. ~~**A seed não tem livro sem estoque**~~ — verificado no item 27: dá para
@@ -714,9 +712,33 @@ o método que o cliente acabou de escolher.
 admin. Permite finalmente medir o acesso a pedido de outro cliente (403 × 404) e
 rodar os smoke pelo perfil que a app de fato usa.
 
-**⚪ Datas continuam sem fuso** (`"2026-07-30T13:01:34.4862"`), agora em campo
-**exibido**: `createdAt` do pedido e `changedAt` do histórico. É o item 3 dos
-menores do 26 saindo do "não incomoda hoje" — decidir na 5b como tratar.
+**✅ Datas sem fuso — RESOLVIDO no mesmo dia (2026-07-30).**
+
+O achado era: `"2026-07-30T13:01:34.4862"`, sem `Z` e sem offset, agora em campo
+**exibido** (`createdAt` do pedido, `changedAt` do histórico). Uma string assim
+não identifica um instante — quem faz o parse aplica o próprio fuso. Medido em
+Node com a string real: máquina brasileira lia 13:01, container em UTC lia 10:01.
+Em SSR o servidor e o navegador discordariam e o texto **mudaria sozinho** depois
+da hidratação.
+
+O dono trocou `LocalDateTime` por **`Instant` em todos os módulos**. Conferido ao
+vivo logo depois de subir:
+
+```
+"createdAt": "2026-07-30T19:55:57.117193400Z"
+```
+
+| Conferência | Resultado |
+|---|---|
+| Campos varridos (carrinho, pedido, histórico, pagamento, usuário) | **9**, todos com `Z` |
+| Tipo | **string** ISO — não epoch (`WRITE_DATES_AS_TIMESTAMPS` está desligado, que é o default) |
+| Valor | bate com `date -u` no mesmo instante — **sem deslocamento** na conversão |
+| 9 casas decimais (nanossegundos do `Instant`) | `new Date()` parseia e trunca para ms |
+
+Consequência no front: o `parseApiDateTime()` que a [19](19-checkout.md) previa
+**deixa de existir** — era só para anexar `-03:00` ao que não tinha fuso. Fica no
+lugar dele uma asserção nos smoke (`/(Z|[+-]\d{2}:?\d{2})$/` em toda data de toda
+resposta), que é o que denuncia módulo esquecido ou regressão.
 
 ### Ainda sem verificação (depende de ADMIN)
 - `customerName` em `ReviewViewModel` — confirmado **só no schema**; criar review
