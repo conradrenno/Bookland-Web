@@ -12,6 +12,14 @@ import { getCurrentCart } from "@/lib/cart/current-cart";
 /** Where an unusable session is sent — the same target the header's icon uses. */
 const SIGN_IN_PATH = "/login?next=%2Fcart";
 
+/** `?motivo=estoque` — set by the checkout when the upstream refuses on stock. */
+const OUT_OF_STOCK_REASON = "estoque";
+
+interface CartPageProps {
+  /** Only `motivo` is read; anything else in the query string is ignored. */
+  searchParams: Promise<{ motivo?: string | string[] }>;
+}
+
 export const metadata: Metadata = {
   title: "Carrinho",
   // Nothing here belongs in an index: it is one customer's private cart.
@@ -26,8 +34,15 @@ export const metadata: Metadata = {
  * change ends in `router.refresh()` and the numbers come back down from here,
  * which is also what keeps the header badge honest (docs/specs/18-cart.md).
  */
-export default async function CartPage() {
-  const cart = await loadCart();
+export default async function CartPage({ searchParams }: CartPageProps) {
+  const [cart, params] = await Promise.all([readCart(), searchParams]);
+
+  // Bounced from here rather than from inside the `try` in `readCart`, which is
+  // what Next asks for — `redirect()` works by throwing. (It does not change the
+  // response: this version answers 200 with a `<meta refresh>` either way, the
+  // same soft-redirect issue as `notFound()`. Measured 2026-07-30.)
+  if (cart === "no-session") redirect(SIGN_IN_PATH);
+
   const itemCount = cartItemCount(cart);
 
   return (
@@ -40,6 +55,20 @@ export default async function CartPage() {
           </p>
         )}
       </header>
+
+      {params.motivo === OUT_OF_STOCK_REASON && (
+        // The checkout sends people here when the upstream refuses on stock. It
+        // cannot say which book — the 409 carries the ids only inside an English
+        // `detail` — but the lines below are already marked "Indisponível", so
+        // this only has to explain why they are back and that nothing was paid.
+        <p
+          role="status"
+          className="mb-6 rounded-lg border border-destructive/40 bg-destructive/5 px-4 py-3 text-sm text-destructive"
+        >
+          Um item ficou indisponível e o pedido não foi concluído — nada foi cobrado. Ajuste ou
+          remova os itens marcados e tente novamente.
+        </p>
+      )}
 
       {cart.items.length === 0 ? (
         <EmptyCart />
@@ -67,27 +96,25 @@ export default async function CartPage() {
 }
 
 /**
- * The cart, or a bounce to sign-in.
+ * The cart, or the word `"no-session"` for the caller to act on.
  *
  * `/cart` is in `PROTECTED_PREFIXES`, so the middleware normally turns anonymous
- * visitors away before this runs. The two cases below are the gap it cannot
- * close: a cookie that exists but no longer decodes, and a token that expires
- * between the middleware and this render. Both mean "sign in again", not "the
- * store is broken", so neither should reach `error.tsx`.
+ * visitors away before this runs. Two gaps it cannot close reach here: a cookie
+ * that exists but no longer decodes, and a token that expires between the
+ * middleware and this render. Both mean "sign in again", not "the store is
+ * broken", so neither should reach `error.tsx`.
+ *
+ * Returning instead of redirecting keeps the throw out of the `try` — see the
+ * note in the component.
  */
-async function loadCart(): Promise<CartViewModel> {
+async function readCart(): Promise<CartViewModel | "no-session"> {
   try {
-    const cart = await getCurrentCart();
-    if (!cart) redirect(SIGN_IN_PATH);
-    return cart;
+    return (await getCurrentCart()) ?? "no-session";
   } catch (error) {
     // `isSessionProblem`, not a bare 401: Spring's `/error` dispatch can wear a
     // 401 while actually being a crash, and bouncing someone to the login page
-    // over a server fault would hide the real failure.
-    //
-    // `redirect()` works by throwing; rethrowing anything we do not recognise
-    // keeps it — and any genuine upstream failure — travelling upwards.
-    if (isApiError(error) && error.isSessionProblem) redirect(SIGN_IN_PATH);
+    // over a server fault would hide the real failure. Anything else travels up.
+    if (isApiError(error) && error.isSessionProblem) return "no-session";
     throw error;
   }
 }

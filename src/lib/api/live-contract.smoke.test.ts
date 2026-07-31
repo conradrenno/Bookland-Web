@@ -16,6 +16,8 @@ import { listCategories, listCategoryBooks } from "./categories";
 import { apiFetch } from "./client";
 import { ErrorCodes } from "./error-codes";
 import { isApiError } from "./errors";
+import { checkout, getOrder } from "./orders";
+import { getOrderPayment } from "./payments";
 import type { BookViewModel, PageResult, TokenViewModel } from "./types";
 
 /** An id of the right shape that nothing is seeded with. */
@@ -23,13 +25,48 @@ const ABSENT_ID = "00000000-0000-0000-0000-000000000000";
 
 const ADMIN = { email: "admin@bookland.com", password: "admin1234" };
 
-async function signIn(): Promise<string> {
+/**
+ * The other seeded account (backend README). The checkout tests run as this one
+ * because buying is a customer's journey, and the admin only ever reaches routes
+ * the storefront never touches.
+ */
+const CUSTOMER = { email: "joao@bookland.com", password: "joao1234" };
+
+async function signInAs(credentials: { email: string; password: string }): Promise<string> {
   const token = await apiFetch<TokenViewModel>("/api/v1/auth/login", {
     method: "POST",
-    body: ADMIN,
+    body: credentials,
   });
   return token.accessToken;
 }
+
+function signIn(): Promise<string> {
+  return signInAs(ADMIN);
+}
+
+/**
+ * Every date field in a response, flattened with its path.
+ *
+ * Used to assert the whole payload at once rather than field by field, so a
+ * date the API grows later is covered without anyone remembering to add it.
+ */
+function dateFields(node: unknown, path = ""): Array<{ path: string; value: string }> {
+  if (typeof node === "string") {
+    return /^\d{4}-\d{2}-\d{2}T\d{2}:/.test(node) ? [{ path, value: node }] : [];
+  }
+  if (Array.isArray(node)) {
+    return node.flatMap((item, index) => dateFields(item, `${path}[${index}]`));
+  }
+  if (node && typeof node === "object") {
+    return Object.entries(node).flatMap(([key, value]) =>
+      dateFields(value, path ? `${path}.${key}` : key),
+    );
+  }
+  return [];
+}
+
+/** `Z` or an explicit offset — anything else does not identify an instant. */
+const CARRIES_ZONE = /(Z|[+-]\d{2}:?\d{2})$/;
 
 describe("live API smoke", () => {
   it("GET /books with query params", async () => {
@@ -288,5 +325,128 @@ describe("live cart smoke", () => {
     const error = await addCartItem(token, ABSENT_ID, 1).catch((e: unknown) => e);
     expect(isApiError(error) && error.isNotFound).toBe(true);
     expect(isApiError(error) && error.code).toBe(ErrorCodes.BOOK_NOT_FOUND);
+  });
+});
+
+/**
+ * Stage 5b. Same reasoning as the cart block above: docs/specs/05-cart-checkout.md
+ * described the checkout from a Linear story and got three things wrong (item 27
+ * of 09-contract-notes.md). What the API actually does is locked down here.
+ *
+ * Runs as the **customer**, and really buys — each test consumes stock and
+ * leaves an order behind. Harmless: the dev database is in-memory.
+ */
+describe("live checkout smoke", () => {
+  let token: string;
+  let book: BookViewModel;
+
+  beforeAll(async () => {
+    token = await signInAs(CUSTOMER);
+    const { content } = await searchBooks({ size: 20 });
+    book = content.find((candidate) => candidate.stockQuantity > 2)!;
+    expect(book).toBeDefined();
+  });
+
+  beforeEach(async () => {
+    const current = await getCart(token);
+    for (const item of current.items) {
+      await removeCartItem(token, item.bookId);
+    }
+  });
+
+  it("charges on the spot: the order comes back CONFIRMED and paid", async () => {
+    // The story said PENDING and the spec guessed AWAITING_PAYMENT. Neither: the
+    // payment happens inside this call, so there is no payment step to build.
+    await addCartItem(token, book.id, 2);
+
+    const order = await checkout(token, "PIX");
+
+    expect(order.status).toBe("CONFIRMED");
+    expect(order.items).toHaveLength(1);
+    expect(order.totalAmount).toBeCloseTo(book.price * 2, 2);
+    expect(order.statusHistory).toContainEqual(
+      expect.objectContaining({ fromStatus: "AWAITING_PAYMENT", toStatus: "CONFIRMED" }),
+    );
+
+    // The same order is readable afterwards, and the payment record exists with
+    // the method the customer chose — which the order itself does not carry.
+    const fetched = await getOrder(token, order.id);
+    expect(fetched.id).toBe(order.id);
+
+    const payment = await getOrderPayment(token, order.id);
+    expect(payment).toMatchObject({ orderId: order.id, method: "PIX", status: "APPROVED" });
+  });
+
+  it("empties the cart, leaving it usable rather than gone", async () => {
+    await addCartItem(token, book.id, 1);
+    await checkout(token, "CREDIT_CARD");
+
+    const cart = await getCart(token);
+    expect(cart.items).toEqual([]);
+    expect(cart.total).toBe(0);
+  });
+
+  it("answers 404 CART_NOT_FOUND when there is nothing to buy", async () => {
+    // Not a 409, and it says this even though `GET /cart` happily returns an
+    // empty cart at the same moment. It is why /checkout redirects instead.
+    const error = await checkout(token, "PIX").catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(404);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_NOT_FOUND);
+  });
+
+  it("rejects a method outside the enum as a bare MALFORMED_REQUEST", async () => {
+    // Naming no field — which is why the BFF validates the method itself.
+    await addCartItem(token, book.id, 1);
+
+    const error = await apiFetch("/api/v1/cart/checkout", {
+      method: "POST",
+      accessToken: token,
+      body: { paymentMethod: "BITCOIN" },
+    }).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(400);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.MALFORMED_REQUEST);
+  });
+
+  it("rejects a missing method with a field-scoped VALIDATION_ERROR", async () => {
+    await addCartItem(token, book.id, 1);
+
+    const error = await apiFetch("/api/v1/cart/checkout", {
+      method: "POST",
+      accessToken: token,
+      body: {},
+    }).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.VALIDATION_ERROR);
+    expect(isApiError(error) && error.messagesFor("paymentMethod")).toBeDefined();
+  });
+
+  it("404s an order id that does not exist", async () => {
+    const error = await getOrder(token, ABSENT_ID).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.isNotFound).toBe(true);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_NOT_FOUND);
+  });
+
+  it("dates every response with a real instant, not a bare local time", async () => {
+    // The backend moved LocalDateTime to Instant on 2026-07-30. This is the net:
+    // a module left behind would send "2026-07-30T13:01:34" and the front would
+    // read it in whatever zone it happens to run in.
+    await addCartItem(token, book.id, 1);
+    const order = await checkout(token, "PIX");
+
+    const payloads = [
+      await getCart(token),
+      order,
+      await getOrderPayment(token, order.id),
+      await apiFetch("/api/v1/orders?size=3", { accessToken: token }),
+    ];
+
+    const dates = payloads.flatMap((payload) => dateFields(payload));
+    expect(dates.length).toBeGreaterThan(0);
+    for (const { path, value } of dates) {
+      expect(`${path}=${value}`).toMatch(CARRIES_ZONE);
+    }
   });
 });

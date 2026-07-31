@@ -20,7 +20,7 @@ const emptyCart = {
   customerId: "eee6a6d1-b523-473d-b0e6-992ad0e30fa7",
   items: [],
   total: 0,
-  updatedAt: "2026-07-29T22:09:28.0627129",
+  updatedAt: "2026-07-30T19:55:56.993067Z",
 };
 
 function post(body: unknown): Promise<Response> {

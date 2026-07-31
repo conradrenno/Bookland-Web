@@ -24,7 +24,7 @@ const cart = {
   customerId: "eee6a6d1-b523-473d-b0e6-992ad0e30fa7",
   items: [],
   total: 0,
-  updatedAt: "2026-07-29T22:09:28.0627129",
+  updatedAt: "2026-07-30T19:55:56.993067Z",
 };
 
 function renderButton(props: Partial<Parameters<typeof AddToCartButton>[0]> = {}) {
@@ -128,11 +128,16 @@ describe("AddToCartButton", () => {
 
   it("cannot be fired twice while the first request is in flight", async () => {
     let calls = 0;
+    // Held until the second click has landed, not for a fixed 50ms: a timer
+    // makes this test fail on a slow run for a reason unrelated to the guard.
+    let release!: () => void;
+    const inFlight = new Promise<void>((resolve) => {
+      release = resolve;
+    });
     server.use(
       http.post(ITEMS_ROUTE, async () => {
         calls += 1;
-        // Long enough that the second click lands before the first resolves.
-        await new Promise((resolve) => setTimeout(resolve, 50));
+        await inFlight;
         return HttpResponse.json(cart);
       }),
     );
@@ -141,6 +146,7 @@ describe("AddToCartButton", () => {
     const cta = screen.getByRole("button", { name: /Adicionar ao carrinho/ });
     await userEvent.click(cta);
     await userEvent.click(cta);
+    release();
 
     await waitFor(() => expect(refresh).toHaveBeenCalled());
     expect(calls).toBe(1);

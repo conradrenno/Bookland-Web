@@ -31,6 +31,7 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.BOOK_NOT_IN_CART]: "Este item não está mais no seu carrinho.",
   [ErrorCodes.CART_NOT_FOUND]: "Seu carrinho está vazio.",
   [ErrorCodes.BOOK_NOT_FOUND]: "Este livro não está mais no catálogo.",
+  [ErrorCodes.ORDER_NOT_FOUND]: "Pedido não encontrado.",
 
   // Request shape
   [ErrorCodes.VALIDATION_ERROR]: "Verifique os campos destacados.",

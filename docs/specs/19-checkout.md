@@ -52,7 +52,7 @@ cancelamento.
 | Decisão | Escolha | Motivo |
 |---|---|---|
 | Leitura do carrinho em `/checkout` | **SSR** com o mesmo `getCurrentCart()` da 5a | Já é memoizado com `cache()`; o header e a página do checkout dividem uma chamada. Zero código novo. |
-| Carrinho vazio em `/checkout` | **`redirect` para `/cart`** no render | Não adianta oferecer confirmação sem itens — o upstream responderia 404. Quem chega por link antigo ou botão de voltar cai no carrinho, que sabe se explicar. |
+| Carrinho vazio em `/checkout` | **Renderiza o estado vazio ali mesmo** | Era `redirect` para `/cart`, e funcionava — mas o `redirect()` de Server Component responde **200 com `<meta refresh>` de 1 s** nesta versão do Next (medido no build de produção; ver `CONTEXT.md`). Renderizar é instantâneo. Chegar aqui já exige carrinho vazio **e** link direto: o CTA do carrinho some quando não há o que comprar. |
 | Mutação | **Route handler** `POST /api/cart/checkout` | Coerente com auth e carrinho: token em cookie httpOnly, `_shared.ts` já pronto. |
 | Validação do `paymentMethod` | No handler, contra a lista do enum | O upstream tem **dois** erros diferentes para o mesmo campo (ausente → `VALIDATION_ERROR`; valor fora do enum → `MALFORMED_REQUEST`). Nenhum dos dois deveria chegar ao usuário, já que o valor sai de um seletor nosso. |
 | Sucesso | `router.push('/orders/{id}')` **+ `router.refresh()`** | O push leva ao pedido; o refresh é o que **zera o badge** do header, que continua sendo server-rendered. Sem ele, o ícone ficaria mostrando itens de um carrinho que já virou pedido. |
@@ -126,9 +126,16 @@ página vá tratá-lo com `notFound()`, não com mensagem.
 
 ## `/checkout`
 
-Server Component. Lê o carrinho com `getCurrentCart()`; se estiver vazio,
-`redirect('/cart')`. Renderiza duas colunas, como o carrinho: o formulário à
-esquerda, o resumo à direita.
+Server Component. Lê o carrinho com `getCurrentCart()`; sem itens, mostra o
+`EmptyCart` (mesmo componente do carrinho) em vez de redirecionar. Com itens,
+renderiza duas colunas, como o carrinho: o formulário à esquerda, o resumo à
+direita.
+
+**O botão "Finalizar compra" do carrinho passa a levar para cá.** Ele nasceu
+desabilitado na 5a — `/checkout` não existia, e botão que dá 404 é pior que um
+que avisa ([18](18-cart.md)). Continua desabilitado quando alguma linha está
+indisponível: o upstream recusaria com 409, e é melhor dizer isso no carrinho do
+que empurrar a pessoa para uma tela de pagamento que vai falhar.
 
 ### O formulário de pagamento
 
