@@ -40,7 +40,20 @@ export const metadata: Metadata = {
  */
 export default async function OrderPage({ params }: OrderPageProps) {
   const { orderId } = await params;
-  const { order, payment } = await loadOrder(orderId);
+
+  // A malformed id is a bad link, not a bad request: the upstream would answer
+  // 400, and a page someone typed wrong is simply missing.
+  if (!isUuid(orderId)) notFound();
+
+  const result = await readOrder(orderId);
+  // Both of these work by throwing, so they are called here rather than from
+  // inside `readOrder`'s `catch` — Next's guidance, and it puts every dead end
+  // of the page in one place. It does not change the response: this version
+  // answers 200 for both (CONTEXT.md's soft-404 note). Measured 2026-07-30.
+  if (result === "no-session") redirect(signInPath(orderId));
+  if (result === "not-found") notFound();
+
+  const { order, payment } = result;
 
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
@@ -112,29 +125,30 @@ export default async function OrderPage({ params }: OrderPageProps) {
  * Whether the upstream even sends 403 here has not been measured yet — the safe
  * reading costs nothing either way.
  */
-async function loadOrder(
-  orderId: string,
-): Promise<{ order: OrderViewModel; payment: PaymentViewModel | null }> {
-  // A malformed id is a bad link, not a bad request: the upstream would answer
-  // 400, and the page a customer typed wrong is simply missing.
-  if (!isUuid(orderId)) notFound();
+type OrderOutcome =
+  | { order: OrderViewModel; payment: PaymentViewModel | null }
+  | "no-session"
+  | "not-found";
 
+async function readOrder(orderId: string): Promise<OrderOutcome> {
   const accessToken = await getAccessToken();
   // The middleware protects `/orders`, so this only happens when the cookie died
   // between it and this render.
-  if (!accessToken) redirect(signInPath(orderId));
+  if (!accessToken) return "no-session";
 
+  // Together, not in series: the payment is a second endpoint, and waiting for
+  // it afterwards would add a round trip to a page that has everything else.
   const [order, payment] = await Promise.all([
     getOrder(accessToken, orderId).catch((error: unknown) => {
-      if (isApiError(error) && (error.isNotFound || error.isForbidden)) notFound();
-      if (isApiError(error) && error.isSessionProblem) redirect(signInPath(orderId));
+      if (isApiError(error) && (error.isNotFound || error.isForbidden)) return "not-found" as const;
+      if (isApiError(error) && error.isSessionProblem) return "no-session" as const;
       throw error;
     }),
     // Degrades on purpose: a payment we cannot read hides its panel.
     getOrderPayment(accessToken, orderId).catch(() => null),
   ]);
 
-  return { order, payment };
+  return typeof order === "string" ? order : { order, payment };
 }
 
 function signInPath(orderId: string): string {

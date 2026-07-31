@@ -209,9 +209,29 @@ test/msw.ts · test/dom.ts
 
 ### 🟡 Pendências conhecidas do 4b (não bloqueiam)
 
-1. **Soft 404:** `notFound()` mostra a página certa mas responde **200**.
-   Reproduzido no build de produção; rota inexistente devolve 404 normalmente.
-   Detalhe e o que já foi descartado em [`03-catalog.md`](docs/specs/03-catalog.md).
+1. **Soft 404 — e agora soft *redirect*:** `notFound()` mostra a página certa mas
+   responde **200**. Reproduzido no build de produção; rota inexistente devolve
+   404 normalmente. Detalhe e o que já foi descartado em
+   [`03-catalog.md`](docs/specs/03-catalog.md).
+   **Medido em 2026-07-30 (etapa 5b), inclusive no build de produção:**
+
+   | O que decide | Resposta |
+   |---|---|
+   | `redirect()` de Server Component | **200** + `<meta http-equiv="refresh" content="1;url=…">` — ~1 s de tela vazia |
+   | `notFound()` de Server Component | **200** com a página 404 |
+   | Rota que não existe (o Next resolve) | **404** de verdade |
+   | `NextResponse.redirect` do **middleware** | **307** correto |
+
+   Ou seja: o que o **middleware** decide sai certo; o que a **página** decide
+   sai mole. Testei a hipótese de ser o `redirect()` dentro de `try/catch` (o
+   Next pede que fique fora): **não é** — o sintoma é idêntico das duas formas.
+   As páginas ficaram com `redirect()`/`notFound()` no topo do componente mesmo
+   assim, porque é a orientação oficial e junta os becos sem saída num lugar só.
+
+   **Contorno onde doía:** `/checkout` com carrinho vazio **não redireciona
+   mais** — renderiza o `EmptyCart` ali mesmo. Instantâneo, e some o único caso
+   dessa família num caminho que o usuário alcança. Onde o middleware já cuida
+   (visitante anônimo), o 307 continua correto.
 2. ~~**Contador do carrinho** no header~~ — **resolvido no passo 4 da 5a**
    (`CartButton` + `safeCartItemCount`).
 3. **"Minha conta" / "Meus pedidos" / "Admin"** no menu de perfil (spec 13):

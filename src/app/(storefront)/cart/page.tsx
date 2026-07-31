@@ -35,7 +35,14 @@ export const metadata: Metadata = {
  * which is also what keeps the header badge honest (docs/specs/18-cart.md).
  */
 export default async function CartPage({ searchParams }: CartPageProps) {
-  const [cart, params] = await Promise.all([loadCart(), searchParams]);
+  const [cart, params] = await Promise.all([readCart(), searchParams]);
+
+  // Bounced from here rather than from inside the `try` in `readCart`, which is
+  // what Next asks for — `redirect()` works by throwing. (It does not change the
+  // response: this version answers 200 with a `<meta refresh>` either way, the
+  // same soft-redirect issue as `notFound()`. Measured 2026-07-30.)
+  if (cart === "no-session") redirect(SIGN_IN_PATH);
+
   const itemCount = cartItemCount(cart);
 
   return (
@@ -89,27 +96,25 @@ export default async function CartPage({ searchParams }: CartPageProps) {
 }
 
 /**
- * The cart, or a bounce to sign-in.
+ * The cart, or the word `"no-session"` for the caller to act on.
  *
  * `/cart` is in `PROTECTED_PREFIXES`, so the middleware normally turns anonymous
- * visitors away before this runs. The two cases below are the gap it cannot
- * close: a cookie that exists but no longer decodes, and a token that expires
- * between the middleware and this render. Both mean "sign in again", not "the
- * store is broken", so neither should reach `error.tsx`.
+ * visitors away before this runs. Two gaps it cannot close reach here: a cookie
+ * that exists but no longer decodes, and a token that expires between the
+ * middleware and this render. Both mean "sign in again", not "the store is
+ * broken", so neither should reach `error.tsx`.
+ *
+ * Returning instead of redirecting keeps the throw out of the `try` — see the
+ * note in the component.
  */
-async function loadCart(): Promise<CartViewModel> {
+async function readCart(): Promise<CartViewModel | "no-session"> {
   try {
-    const cart = await getCurrentCart();
-    if (!cart) redirect(SIGN_IN_PATH);
-    return cart;
+    return (await getCurrentCart()) ?? "no-session";
   } catch (error) {
     // `isSessionProblem`, not a bare 401: Spring's `/error` dispatch can wear a
     // 401 while actually being a crash, and bouncing someone to the login page
-    // over a server fault would hide the real failure.
-    //
-    // `redirect()` works by throwing; rethrowing anything we do not recognise
-    // keeps it — and any genuine upstream failure — travelling upwards.
-    if (isApiError(error) && error.isSessionProblem) redirect(SIGN_IN_PATH);
+    // over a server fault would hide the real failure. Anything else travels up.
+    if (isApiError(error) && error.isSessionProblem) return "no-session";
     throw error;
   }
 }
