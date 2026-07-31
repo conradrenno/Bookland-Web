@@ -17,9 +17,13 @@ interface CartSummaryProps {
 /**
  * Total and the way out of the cart (docs/specs/18-cart.md).
  *
- * The CTA is **disabled on purpose**: `/checkout` arrives in stage 5b, and a
- * button that 404s is worse than one that says "soon" — same rule that keeps
- * "Meus pedidos" out of the account menu until the page exists.
+ * The CTA led nowhere through stage 5a — `/checkout` did not exist yet, and a
+ * button that 404s is worse than one that says "soon". It exists now, so this is
+ * a link (docs/specs/19-checkout.md).
+ *
+ * It still goes dead when a line is out of stock: the checkout would be refused
+ * upstream with a 409, and bouncing someone off a payment page teaches them
+ * nothing the cart cannot say here.
  */
 export function CartSummary({ total, itemCount, hasUnavailableItem }: CartSummaryProps) {
   return (
@@ -52,14 +56,24 @@ export function CartSummary({ total, itemCount, hasUnavailableItem }: CartSummar
         </span>
       </div>
 
-      <Button size="lg" className="mt-5 w-full" disabled>
-        Finalizar compra
-      </Button>
-      <p className="mt-2 text-center text-xs text-muted-foreground">
-        {hasUnavailableItem
-          ? "Remova os itens indisponíveis para continuar."
-          : "O checkout estará disponível em breve."}
-      </p>
+      {hasUnavailableItem ? (
+        // A `<button disabled>` rather than a dimmed link: a disabled link is
+        // still followable by keyboard and by right-click, and this one must not
+        // be followed.
+        <Button size="lg" className="mt-5 w-full" disabled>
+          Finalizar compra
+        </Button>
+      ) : (
+        <Link href="/checkout" className={cn(buttonVariants({ size: "lg" }), "mt-5 w-full")}>
+          Finalizar compra
+        </Link>
+      )}
+
+      {hasUnavailableItem && (
+        <p className="mt-2 text-center text-xs text-muted-foreground">
+          Remova os itens indisponíveis para continuar.
+        </p>
+      )}
 
       <Link
         href="/"
