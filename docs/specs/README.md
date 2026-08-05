@@ -25,6 +25,7 @@ Ordem de leitura sugerida:
 | 17 | [Brief da logo](17-logo-brief.md) | Dimensões, formatos e por que monocromática |
 | 18 | [Carrinho (etapa 5a)](18-cart.md) | Plano de implementação: `cart.ts`, `/cart`, contador (US-13) |
 | 19 | [Checkout e pedido (etapa 5b)](19-checkout.md) | Plano: `/checkout`, `/orders/[id]`, status (US-14, US-18) |
+| 20 | [Histórico e cancelamento (etapa 6)](20-orders-history.md) | Plano: `/orders`, cancelar com diálogo (US-15, US-16) |
 
 ## Fontes de verdade
 

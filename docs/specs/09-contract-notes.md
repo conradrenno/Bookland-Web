@@ -748,6 +748,121 @@ resposta), que é o que denuncia módulo esquecido ou regressão.
 - Se `coverImageUrl` aceita mesmo só 255 chars (item 19) — precisa de `POST /books`.
 - Se `DELETE /users/{id}` libera o e-mail para novo cadastro.
 
+## 28. Histórico e cancelamento: comportamento real — NOVO (2026-08-05)
+
+Sondado ao vivo **antes** de escrever a [20-orders-history.md](20-orders-history.md),
+pelo mesmo motivo dos itens 25, 26 e 27. Rodado como **CUSTOMER**
+(`joao@bookland.com`), que é o perfil que a app de fato usa.
+
+**✅ A ordenação foi CORRIGIDA no mesmo dia** — backend `932727f`. O relato
+abaixo fica como registro do que foi medido e do porquê de ter ido para o
+backend; a resolução está no fim deste item.
+
+**🔴 `GET /orders` vinha em ordem crescente, e `sort` não existe.**
+
+O item 27 já tinha visto a ordem crescente. O que faltava — e muda a solução — é
+que **não há como pedir outra**. Seis variantes, todas **200 na mesma ordem**:
+
+| Query | Resposta |
+|---|---|
+| `?sort=createdAt,desc` | 200, ordem inalterada |
+| `?sort=createdAt%2Cdesc` | 200, ordem inalterada |
+| `?sort=createdAt,DESC` | 200, ordem inalterada |
+| `?sort=-createdAt` | 200, ordem inalterada |
+| `?sort=createdAt&direction=desc` | 200, ordem inalterada |
+| `?sort=lixo,desc` | **200**, sem 400 — ignorado como o `sort` do catálogo (item 25) |
+
+E a paginação prova que inverter no BFF não resolve — com 3 pedidos e `size=2`:
+
+```
+page 0: [18:17:49.755, 18:17:49.830]   ← os dois mais antigos
+page 1: [18:18:33.254]                 ← o MAIS RECENTE, na última página
+```
+
+Inverter a página traz os antigos em ordem invertida, não os recentes. Por isso a
+[20](20-orders-history.md) manda isso para o **backend** (`Sort.by(DESC,
+"createdAt")`) em vez de contornar — e a US-15 já exigia decrescente.
+
+> Isto **corrige a orientação** que o item 27 deu ("ordenar no BFF na etapa 6"):
+> ela foi escrita sem saber que o mais recente cai na última página.
+
+**🔴 Pedido de outro cliente é `403 ORDER_ACCESS_DENIED` — a pergunta da 19.**
+
+```
+GET    /api/v1/orders/{id-do-admin}   (token do joao) → 403 ORDER_ACCESS_DENIED
+DELETE /api/v1/orders/{id-do-admin}   (token do joao) → 403 ORDER_ACCESS_DENIED
+GET    /api/v1/orders/{id-do-admin}   (token do admin) → status inalterado ✔
+```
+
+Não é 404, e o isolamento **segura também na mutação**. Mesmo assim, a página
+trata 403 como `notFound()` — decisão do dono, para não confirmar a existência do
+id a quem sondar. O que muda é que deixou de ser palpite.
+
+**🟢 Cancelamento: `DELETE` devolve 200 com o pedido, não 204.**
+
+| Caso | Resposta |
+|---|---|
+| `DELETE` em `CONFIRMED` | **200** + `OrderViewModel` já `CANCELLED`, com `CONFIRMED → CANCELLED` no `statusHistory` |
+| `GET /payments/order/{id}` depois | **`REFUNDED`** — automático, como o README prometia |
+| `DELETE` no mesmo pedido de novo | **409 `ORDER_CANCELLATION_NOT_ALLOWED`** (código novo, catalogar) |
+| `DELETE` em id inexistente | 404 `ORDER_NOT_FOUND` |
+| `DELETE` com id malformado | 400 `INVALID_PARAMETER` + `errors.orderId: ["must be a valid UUID"]` |
+| Pedido cancelado no histórico | **continua listado**, com `status: "CANCELLED"` |
+
+**🟡 Paginação de `/orders` repete os dois vícios do catálogo (item 25).**
+
+| Query | Resposta |
+|---|---|
+| `?size=1000` | **200 e obedece** — precisa do mesmo teto `MAX_PAGE_SIZE` |
+| `?page=-1`, `?size=0`, `?page=abc` | **400** — o BFF descarta antes de subir |
+| `?page=99` (fora do intervalo) | **200** com `content: []` (e ecoa `page: 99`) |
+| Sem token | 401 `TOKEN_MISSING` |
+
+**Códigos novos a catalogar:** `ORDER_ACCESS_DENIED` (403),
+`ORDER_CANCELLATION_NOT_ALLOWED` (409).
+
+### ✅ Ordenação — RESOLVIDA no mesmo dia (2026-08-05, backend `932727f`)
+
+A consulta rodava **sem `ORDER BY`**: o banco devolvia na ordem que quisesse, na
+prática ordem de inserção. Agora é **`createdAt` decrescente, com empate desfeito
+por `id` decrescente**.
+
+O desempate é o que torna a paginação segura, e não é firula: dois pedidos com o
+mesmo `createdAt` podiam trocar de posição entre requisições, fazendo **um pedido
+sumir das duas páginas e outro aparecer nas duas**.
+
+**Reconferido ao vivo** com 5 pedidos criados dentro do mesmo segundo
+(`.037794Z` a `.182109Z`) — o cenário de empate:
+
+| Verificação | Resultado |
+|---|---|
+| `content[0]` é o mais recente | ✅ |
+| 3 páginas de `size=2` concatenadas × `?size=100` | ✅ idênticas, item a item |
+| Pedido duplicado ou perdido entre páginas | ✅ nenhum |
+| `?sort=createdAt,asc` e `?sort=lixo,desc` | 200, ordem padrão (ignorados) |
+| Cancelamento e 409 repetido | ✅ inalterados |
+
+**Duas coisas que o dono do backend fixou como contrato** (README, seção Orders):
+
+1. **Não haverá ordenação configurável pelo cliente.** As rotas de pedido servem
+   sempre o mais recente primeiro — o modelo de Stripe/Shopify/GitHub: ordem fixa
+   sensata mais filtros, não `?sort=campo,direção`. Se uma tela precisar de outra
+   ordem, ela entra como **valor de lista fechada**. Consequência para nós: o BFF
+   **não manda `?sort=`**; os únicos parâmetros são `page` e `size`.
+2. **`?sort=` responder 200 e ignorar não é específico desta rota** — a API
+   inteira ignora query param desconhecido. Casa com o item 25, onde
+   `?sort=bogus` no catálogo também passa calado.
+
+> ⚠️ **Mudou junto:** `GET /admin/orders/customer/{customerId}` compartilhava a
+> consulta e **também passou a vir decrescente**. Varri o `src/` — nada nosso
+> consome essa rota; o único vestígio de admin é o tipo
+> `AdminOrderSummaryViewModel`, parado para a fase 2. `GET /admin/orders` já
+> estava correto e só ganhou o desempate.
+
+> Isto **encerra** a orientação do item 27 ("ordenar no BFF na etapa 6") e a
+> orientação intermediária deste item ("mandar para o backend"): não há nada a
+> fazer no front.
+
 ---
 
 ### Ação sugerida ao dono (revisão 3 — 2026-07-28)
