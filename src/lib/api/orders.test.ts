@@ -1,11 +1,12 @@
 import { http, HttpResponse } from "msw";
 import { describe, expect, it } from "vitest";
 
+import { DEFAULT_PAGE_SIZE, MAX_PAGE_SIZE } from "@/lib/config";
 import { ErrorCodes } from "./error-codes";
 import { isApiError } from "./errors";
-import { checkout, getOrder } from "./orders";
+import { cancelOrder, checkout, getOrder, listOrders, parseOrderSearchParams } from "./orders";
 import { server } from "@/test/msw";
-import type { OrderViewModel } from "./types";
+import type { OrderSummaryViewModel, OrderViewModel } from "./types";
 
 const BASE = "http://localhost:8080";
 const CHECKOUT_URL = `${BASE}/api/v1/cart/checkout`;
@@ -176,5 +177,236 @@ describe("getOrder", () => {
     await getOrder(TOKEN, "../../admin/orders" as never).catch(() => null);
 
     expect(seen.url).toBe("/api/v1/orders/..%2F..%2Fadmin%2Forders");
+  });
+});
+
+/** A history row — the listing carries `itemCount`, never the items themselves. */
+function summary(overrides: Partial<OrderSummaryViewModel> = {}): OrderSummaryViewModel {
+  return {
+    id: ORDER_ID,
+    status: "CONFIRMED",
+    totalAmount: 139.8,
+    itemCount: 2,
+    createdAt: "2026-08-05T19:39:50.182109Z",
+    ...overrides,
+  };
+}
+
+describe("listOrders", () => {
+  it("asks for a page and sends the token", async () => {
+    const seen: { query?: string; auth?: string | null } = {};
+    server.use(
+      http.get(ORDERS_URL, ({ request }) => {
+        const url = new URL(request.url);
+        seen.query = url.search;
+        seen.auth = request.headers.get("Authorization");
+        return HttpResponse.json({
+          content: [summary()],
+          page: 0,
+          size: 20,
+          totalElements: 1,
+          totalPages: 1,
+        });
+      }),
+    );
+
+    const result = await listOrders(TOKEN, { page: 0, size: 20 });
+
+    expect(seen.auth).toBe(`Bearer ${TOKEN}`);
+    expect(result.content[0].itemCount).toBe(2);
+  });
+
+  it("never sends a sort parameter", async () => {
+    // The route reads none, by contract rather than oversight: orders are served
+    // newest-first everywhere (09-contract-notes.md item 28). Sending one would
+    // be cargo cult, and this is the test that keeps it from creeping back.
+    const seen: { params?: string[] } = {};
+    server.use(
+      http.get(ORDERS_URL, ({ request }) => {
+        seen.params = [...new URL(request.url).searchParams.keys()];
+        return HttpResponse.json({
+          content: [],
+          page: 0,
+          size: 20,
+          totalElements: 0,
+          totalPages: 0,
+        });
+      }),
+    );
+
+    await listOrders(TOKEN, { page: 2, size: 10 });
+
+    expect(seen.params).toEqual(["page", "size"]);
+  });
+
+  it("passes an empty history straight through", async () => {
+    server.use(
+      http.get(ORDERS_URL, () =>
+        HttpResponse.json({
+          content: [],
+          page: 0,
+          size: 20,
+          totalElements: 0,
+          totalPages: 0,
+        }),
+      ),
+    );
+
+    const result = await listOrders(TOKEN);
+
+    expect(result.content).toEqual([]);
+    expect(result.totalPages).toBe(0);
+  });
+
+  it("does not reorder what the upstream sent", async () => {
+    // The fix lives in the backend (932727f). If anything here ever "helpfully"
+    // sorted, it would fight the upstream and put the newest order last again.
+    const newest = summary({ id: ORDER_ID, createdAt: "2026-08-05T19:39:50.182109Z" });
+    const oldest = summary({
+      id: "0aca9835-1f0e-4a51-9f3b-0a5c9f0e4d21",
+      createdAt: "2026-08-05T19:39:50.037794Z",
+    });
+    server.use(
+      http.get(ORDERS_URL, () =>
+        HttpResponse.json({
+          content: [newest, oldest],
+          page: 0,
+          size: 20,
+          totalElements: 2,
+          totalPages: 1,
+        }),
+      ),
+    );
+
+    const result = await listOrders(TOKEN);
+
+    expect(result.content.map((o) => o.id)).toEqual([newest.id, oldest.id]);
+  });
+
+  it("treats a dead session as a session problem", async () => {
+    server.use(
+      http.get(ORDERS_URL, () => problem(401, ErrorCodes.TOKEN_MISSING, "Authentication required")),
+    );
+
+    const error = await listOrders(TOKEN).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.isSessionProblem).toBe(true);
+  });
+});
+
+describe("cancelOrder", () => {
+  it("DELETEs and returns the updated order, not an empty body", async () => {
+    // Named DELETE, answers 200 with the whole order. Verified live.
+    const seen: { method?: string; url?: string } = {};
+    server.use(
+      http.delete(`${ORDERS_URL}/:orderId`, ({ request }) => {
+        seen.method = request.method;
+        seen.url = new URL(request.url).pathname;
+        return HttpResponse.json(
+          order({
+            status: "CANCELLED",
+            statusHistory: [
+              ...order().statusHistory,
+              {
+                fromStatus: "CONFIRMED",
+                toStatus: "CANCELLED",
+                changedAt: "2026-08-05T19:39:51.015242Z",
+                changedBy: "224d5247-205a-4c88-868b-80672a010493",
+              },
+            ],
+          }),
+        );
+      }),
+    );
+
+    const result = await cancelOrder(TOKEN, ORDER_ID);
+
+    expect(seen.method).toBe("DELETE");
+    expect(seen.url).toBe(`/api/v1/orders/${ORDER_ID}`);
+    expect(result.status).toBe("CANCELLED");
+    expect(result.statusHistory.at(-1)).toMatchObject({
+      fromStatus: "CONFIRMED",
+      toStatus: "CANCELLED",
+    });
+  });
+
+  it("surfaces a second cancellation as 409 ORDER_CANCELLATION_NOT_ALLOWED", async () => {
+    // The likeliest failure of the flow: what a double click answers.
+    server.use(
+      http.delete(`${ORDERS_URL}/:orderId`, () =>
+        problem(
+          409,
+          ErrorCodes.ORDER_CANCELLATION_NOT_ALLOWED,
+          "Order … cannot be cancelled in status: CANCELLED",
+        ),
+      ),
+    );
+
+    const error = await cancelOrder(TOKEN, ORDER_ID).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_CANCELLATION_NOT_ALLOWED);
+    expect(isApiError(error) && error.isConflict).toBe(true);
+  });
+
+  it("surfaces another customer's order as 403 ORDER_ACCESS_DENIED", async () => {
+    server.use(
+      http.delete(`${ORDERS_URL}/:orderId`, () =>
+        problem(403, ErrorCodes.ORDER_ACCESS_DENIED, "Access denied to order: …"),
+      ),
+    );
+
+    const error = await cancelOrder(TOKEN, ORDER_ID).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_ACCESS_DENIED);
+    expect(isApiError(error) && error.isForbidden).toBe(true);
+    // A permission failure, not a dead session — it must not trigger a refresh.
+    expect(isApiError(error) && error.isSessionProblem).toBe(false);
+  });
+
+  it("reports a missing order as ORDER_NOT_FOUND", async () => {
+    server.use(
+      http.delete(`${ORDERS_URL}/:orderId`, () =>
+        problem(404, ErrorCodes.ORDER_NOT_FOUND, "Order not found: …"),
+      ),
+    );
+
+    const error = await cancelOrder(TOKEN, ORDER_ID).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.isNotFound).toBe(true);
+  });
+});
+
+describe("parseOrderSearchParams", () => {
+  it("reads a usable page and size", () => {
+    expect(parseOrderSearchParams({ page: "2", size: "10" })).toEqual({ page: 2, size: 10 });
+  });
+
+  it("falls back to the first page and the default size when nothing is given", () => {
+    expect(parseOrderSearchParams()).toEqual({ page: 0, size: DEFAULT_PAGE_SIZE });
+  });
+
+  it("drops the junk the upstream would answer 400 to", () => {
+    // Measured: `page=-1`, `size=0` and `page=abc` are all 400 upstream. A typo
+    // in the address bar has to show the list, not an error page.
+    expect(parseOrderSearchParams({ page: "-1" }).page).toBe(0);
+    expect(parseOrderSearchParams({ page: "abc" }).page).toBe(0);
+    expect(parseOrderSearchParams({ page: "1.5" }).page).toBe(0);
+    expect(parseOrderSearchParams({ size: "0" }).size).toBe(DEFAULT_PAGE_SIZE);
+    expect(parseOrderSearchParams({ size: "abc" }).size).toBe(DEFAULT_PAGE_SIZE);
+    expect(parseOrderSearchParams({ page: "", size: " " })).toEqual({
+      page: 0,
+      size: DEFAULT_PAGE_SIZE,
+    });
+  });
+
+  it("caps the size, because the upstream honours ?size=1000 literally", () => {
+    expect(parseOrderSearchParams({ size: "1000" }).size).toBe(MAX_PAGE_SIZE);
+  });
+
+  it("refuses a repeated parameter outright instead of picking one", () => {
+    expect(parseOrderSearchParams({ page: ["1", "2"] })).toEqual({
+      page: 0,
+      size: DEFAULT_PAGE_SIZE,
+    });
   });
 });

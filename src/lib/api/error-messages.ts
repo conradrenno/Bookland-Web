@@ -31,7 +31,13 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.BOOK_NOT_IN_CART]: "Este item não está mais no seu carrinho.",
   [ErrorCodes.CART_NOT_FOUND]: "Seu carrinho está vazio.",
   [ErrorCodes.BOOK_NOT_FOUND]: "Este livro não está mais no catálogo.",
+  // Orders. `ORDER_ACCESS_DENIED` (403, someone else's order) deliberately
+  // shares the copy of the 404: telling a stranger "you may not see this" would
+  // confirm that the id is a real order, and the customer cannot act on the
+  // difference anyway (docs/specs/20-orders-history.md).
   [ErrorCodes.ORDER_NOT_FOUND]: "Pedido não encontrado.",
+  [ErrorCodes.ORDER_ACCESS_DENIED]: "Pedido não encontrado.",
+  [ErrorCodes.ORDER_CANCELLATION_NOT_ALLOWED]: "Este pedido não pode mais ser cancelado.",
 
   // Request shape
   [ErrorCodes.VALIDATION_ERROR]: "Verifique os campos destacados.",

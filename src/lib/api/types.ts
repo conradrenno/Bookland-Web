@@ -265,6 +265,20 @@ export interface OrderSummaryViewModel {
   createdAt: ISODateTime;
 }
 
+/**
+ * Query params accepted by `GET /api/v1/orders`.
+ *
+ * Just the two: the route reads **no** `sort`, by decision rather than
+ * oversight. The backend serves orders newest-first everywhere and treats that
+ * as contract (README, section Orders); a future "oldest first" would arrive as
+ * a closed list of values, never as `?sort=field,direction`.
+ * See 09-contract-notes.md item 28.
+ */
+export type OrderSearchParams = {
+  page?: number;
+  size?: number;
+};
+
 /** Admin listing row: a summary plus the owning customer (phase 2). */
 export interface AdminOrderSummaryViewModel extends OrderSummaryViewModel {
   /** Only the id — the API does not expose the customer's name here. */

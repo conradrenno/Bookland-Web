@@ -1,6 +1,7 @@
 "use client";
 
-import { ChevronDown, LogOut, User } from "lucide-react";
+import { ChevronDown, LogOut, Package, User } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { toast } from "sonner";
@@ -27,8 +28,9 @@ import { cn } from "@/lib/utils";
  * shows the local part of the e-mail. A real name would need `GET /users/{id}`
  * on every page render — not worth it for a label (docs/specs/02-auth.md).
  *
- * "Minha conta", "Meus pedidos" and the admin entry from spec 13 land here when
- * their pages exist; linking to them now would only produce 404s.
+ * "Meus pedidos" arrived with stage 6, once `/orders` existed. "Minha conta" and
+ * the admin entry from spec 13 land here the same way — when their pages exist;
+ * linking to them now would only produce 404s.
  */
 export function AccountMenu({ user }: { user: SessionUser }) {
   const router = useRouter();
@@ -83,6 +85,15 @@ export function AccountMenu({ user }: { user: SessionUser }) {
             {user.email}
           </DropdownMenuLabel>
         </DropdownMenuGroup>
+        <DropdownMenuSeparator />
+        {/* `render={<Link/>}` here, not a styled anchor: a menu item has to keep
+            its `menuitem` role and the menu's keyboard handling, which is what
+            `render` preserves — the opposite trade-off from the CTA buttons,
+            where link semantics were the thing worth keeping. */}
+        <DropdownMenuItem render={<Link href="/orders" />}>
+          <Package aria-hidden />
+          Meus pedidos
+        </DropdownMenuItem>
         <DropdownMenuSeparator />
         <DropdownMenuItem onClick={onSignOut} disabled={signingOut}>
           <LogOut aria-hidden />

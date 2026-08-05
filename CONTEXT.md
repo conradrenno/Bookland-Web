@@ -140,21 +140,52 @@ Fase 2: wishlist, área de conta, painel admin.
 - [x] **Etapa 5a, passo 4 (2026-07-30):** página `/cart` (lista, stepper,
       remoção, total, estado vazio) e o **contador no header** — fecha a 5a.
       **316 unit + 23 smoke verdes**; página exercitada contra o Spring no ar.
-- [ ] **Etapa 5b — próxima:** `/checkout`, `POST /api/cart/checkout` e o redirect
-      para `/orders/{id}` (o CTA "Finalizar compra" está **desabilitado** até lá)
+- [x] **Etapa 5b (2026-07-30):** `/checkout` (escolha de pagamento, campos
+      decorativos que **não saem do navegador**), `POST /api/cart/checkout` e
+      `/orders/[orderId]` — o pedido já nasce `CONFIRMED` e pago.
+      → [`19-checkout.md`](docs/specs/19-checkout.md)
+- [x] **Etapa 6 (2026-08-05):** `/orders` (histórico paginado) e o
+      **cancelamento** com diálogo — fecha US-15 e US-16.
+      **435 unit + 41 smoke verdes.** → [`20-orders-history.md`](docs/specs/20-orders-history.md)
+- [ ] **Próxima:** **reviews na página do livro** ([04](docs/specs/04-reviews.md)) —
+      é o que falta do MVP fora do caminho de compra
 - [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
-      (`stockQuantity` primitivo — e agora **item 26**, o mesmo defeito em
-      `AddCartItemRequest.quantity`). Cosmético: itens 16 e 20
+      (`stockQuantity` primitivo — e **item 26**, o mesmo defeito em
+      `AddCartItemRequest.quantity`). Cosmético: itens 16 e 20.
+      ✅ A ordenação de `GET /orders` (item 28) **já foi resolvida** — `932727f`
 
-## 🚦 Onde paramos — leia isto primeiro (2026-07-30)
+## 🚦 Onde paramos — leia isto primeiro (2026-08-05)
 
-**Etapas 1 a 4 e a 5a inteira estão feitas, testadas e verificadas.**
-Comandos: `pnpm test:run` (**316** unit — 237 node + 79 jsdom),
-`pnpm test:smoke` (**23** contra o Spring **no ar**), `pnpm typecheck`,
-`pnpm lint` — todos limpos.
+**O MVP de compra está fechado ponta a ponta: catálogo → detalhe → carrinho →
+checkout → pedido → histórico → cancelamento.** Etapas 1 a 6 feitas, testadas e
+verificadas contra o Spring no ar.
 
-> ⚠️ O número de testes citado nas etapas antigas acima está **desatualizado**
-> (o 241 da etapa 4b já era 248 na prática). O valor corrente é o desta seção.
+Comandos: `pnpm test:run` (**435** unit), `pnpm test:smoke` (**41** contra o
+Spring **no ar**), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
+
+> ⚠️ Os números de teste citados nas etapas antigas acima estão **desatualizados**
+> por construção — cada etapa registrou o seu. O valor corrente é o desta seção.
+
+### Etapa 6 — fechada (a mais recente)
+
+`/orders` (lista SSR paginada, estado na URL), `DELETE /api/orders/[orderId]`,
+`CancelOrderButton` com `AlertDialog`, `OrderSummaryCard`, `EmptyOrders`, e
+**"Meus pedidos" no menu de conta** — o link que a 5b não pôde criar.
+
+**A peça que veio de fora:** o histórico vinha **crescente** e o `sort` era
+ignorado, então o pedido mais recente caía na **última página**. Não havia
+contorno honesto no BFF — inverter a página só reordena os antigos entre si — e
+o dono **corrigiu no backend** (`932727f`): `createdAt DESC` com empate desfeito
+por `id`. Reconferido ao vivo com 5 pedidos no mesmo segundo. Por isso
+`listOrders` **não ordena nada** e **nunca manda `?sort=`**.
+
+O `Pagination` **saiu de `components/catalog/` para `components/ui/`** e agora
+recebe `hrefFor: (page) => string`. Era o que o casava com `buildCatalogHref` e
+`BookSearchParams`; o catálogo só passou a fechar a closure.
+
+**Cancelar mora só no detalhe**, nunca na lista: restaura estoque e estorna sem
+desfazer, então pede que a pessoa esteja olhando para o que vai perder. O
+diálogo **nomeia o valor** em vez de perguntar "tem certeza?".
 
 ### Etapa 5a — fechada
 
@@ -183,26 +214,39 @@ categorias, detalhe do livro, header e footer em todas as páginas.
 lib/          config.ts · utils.ts · format.ts (preço/data/nota pt-BR)
 lib/api/      client.ts (apiFetch) · url.ts · errors.ts · problem.ts
               error-codes.ts · error-messages.ts · types.ts · uuid.ts
-              auth.ts (server→Spring) · auth-client.ts (browser→BFF)
+              bff-mutate.ts (browser → nossas rotas, resultado normalizado)
+              auth.ts / auth-client.ts · cart.ts / cart-client.ts
+              orders.ts / orders-client.ts · checkout-client.ts · payments.ts
               books.ts · categories.ts · covers.ts
 lib/auth/     session.ts · cookies.ts · refresh.ts · protected-routes.ts
               server.ts · next-path.ts
-              cart.ts (server→Spring) · cart-client.ts (browser→BFF)
 lib/catalog/  search-href.ts (href do catálogo) · use-catalog-params.ts
 lib/cart/     current-cart.ts (cookie → carrinho, memoizado; contagem segura)
+lib/checkout/ payment-schema.ts   lib/payments/ labels.ts
+lib/orders/   status.ts (OrderStatus → rótulo, cor, cancelável)
 lib/forms/    apply-api-error.ts
 app/          layout.tsx (shell) · page.tsx (catálogo) · error · loading · not-found
+app/api/      _shared.ts (helpers de route handler)
 app/api/auth/{login,register,logout,refresh}/route.ts
-app/api/cart/items/route.ts · app/api/cart/items/[bookId]/route.ts
+app/api/cart/items/route.ts · items/[bookId]/route.ts · checkout/route.ts
+app/api/orders/[orderId]/route.ts   (DELETE — cancelamento)
 app/(auth)/   layout.tsx · login/page.tsx · register/page.tsx
-app/(storefront)/ categories/page.tsx · books/[bookId]/page.tsx · cart/page.tsx
-components/auth/    login-form · register-form · auth-card · form-alert · text-field
+app/(storefront)/ categories · books/[bookId] · cart · checkout
+                  orders · orders/[orderId]
+components/auth/    login-form · register-form · auth-card
+components/form/    form-alert · text-field
 components/cart/    add-to-cart-button · cart-line · quantity-stepper
                     cart-summary · empty-cart
 components/catalog/ book-card · book-cover · rating-stars · search-bar
-                    catalog-filters · pagination
+                    catalog-filters
+components/checkout/ checkout-form · payment-method-picker · payment-fields
+                     order-review
+components/orders/  order-items · order-payment · order-status-badge
+                    status-timeline · order-summary-card · empty-orders
+                    cancel-order-button
 components/layout/  site-header · site-footer · header-shell · categories-menu
                     account-menu · mobile-nav · payment-marks · cart-button
+components/ui/      pagination (genérica, `hrefFor`) · alert-dialog · …
 middleware.ts
 test/msw.ts · test/dom.ts
 ```
@@ -234,8 +278,9 @@ test/msw.ts · test/dom.ts
    (visitante anônimo), o 307 continua correto.
 2. ~~**Contador do carrinho** no header~~ — **resolvido no passo 4 da 5a**
    (`CartButton` + `safeCartItemCount`).
-3. **"Minha conta" / "Meus pedidos" / "Admin"** no menu de perfil (spec 13):
-   entram quando as páginas existirem — hoje só "Sair", para não gerar link morto.
+3. ~~**"Meus pedidos"** no menu de perfil~~ — **resolvido na etapa 6**.
+   **"Minha conta"** e **"Admin"** (spec 13) entram quando suas páginas
+   existirem — hoje linkariam para 404.
 
 O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
 `jsdom` (`*.test.tsx`, componentes). `pnpm test:run` roda os dois; para um só,
@@ -270,23 +315,39 @@ O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
    `buildCatalogHref` é o inverso do `parseBookSearchParams` e centraliza duas
    regras que se perdem quando cada componente monta href na mão: mudar filtro
    **volta para a primeira página**, e valor default **some da URL**.
+   Vale igual para `/orders`, com `parseOrderSearchParams`.
+
+7. **Ordem de listagem é do backend.** `listOrders` não ordena e **não manda
+   `?sort=`**. A rota nunca leu o parâmetro, e o contrato do backend é ordem
+   fixa (mais recente primeiro), no modelo Stripe/Shopify/GitHub. Quando o
+   histórico vinha errado, o fix foi lá — porque inverter no BFF só reordena a
+   página que chegou, e o pedido mais novo continua na última. Item 28 de
+   [09-contract-notes.md](docs/specs/09-contract-notes.md).
+
+8. **Ação destrutiva pede diálogo e contexto.** Cancelar pedido mora **só no
+   detalhe**, nunca na lista, e o `AlertDialog` **nomeia o valor estornado** em
+   vez de perguntar "tem certeza?". Uma lista com ação destrutiva por linha
+   convida ao clique errado — as linhas só se distinguem pelo id curto.
 
 ### Próximo passo natural
-**Etapa 5b:** `/checkout` (escolha de `paymentMethod`), `POST /api/cart/checkout`
-e o redirect para `/orders/{id}`. Duas coisas já esperam por ela:
 
-- o CTA **"Finalizar compra"** do `CartSummary` está **desabilitado**, com a
-  legenda "O checkout estará disponível em breve" — botão que dá 404 é pior;
-- a **revalidação de estoque na confirmação** é o caminho de erro próprio da 5b.
-  O `/cart` já marca a linha indisponível e bloqueia o "+", mas quem recusa o
-  pedido é o backend.
+**Reviews na página do livro** ([04-reviews.md](docs/specs/04-reviews.md)) — é o
+que falta do MVP, e o único pedaço fora do caminho de compra. Duas coisas já
+conhecidas antes de começar:
 
-E lembrar do item aberto para **pedidos**: `updatedAt` vem **sem fuso horário**;
-no carrinho não aparece, em `/orders` uma data sem `Z` é lida como hora local.
+- `GET /books/{id}/reviews` devolve `ReviewListViewModel` com **média e
+  distribuição** prontas, e `customerName` já vem no review (item da 2ª rodada);
+- criar review exige um pedido **`DELIVERED`** (`PURCHASE_REQUIRED`, verificado).
+  Como o checkout entrega `CONFIRMED` e só o ADMIN promove status, **o cliente
+  comum não consegue avaliar nada** pelo storefront. Decidir com o dono o que a
+  UI faz: esconder o formulário, ou mostrá-lo desabilitado com o motivo.
 
-Depois: pedidos ([06](docs/specs/06-orders.md)).
-Fora do caminho principal, faltam **reviews na página do livro**
-([04-reviews.md](docs/specs/04-reviews.md)).
+Depois disso, o MVP acaba e começa a **fase 2** ([08](docs/specs/08-phase-2.md)):
+wishlist, área de conta, painel admin.
+
+**Limpezas que continuam pendentes** (nenhuma bloqueia): os
+`<Button render={<Link/>}>` que avisam no console, e o rename
+`middleware.ts` → `proxy.ts` que o Next 16 pede.
 
 ### 🟡 Achados abertos desta etapa (não bloqueiam)
 
@@ -298,12 +359,18 @@ Fora do caminho principal, faltam **reviews na página do livro**
    `<Link className={buttonVariants(...)}>` — mesma aparência, semântica de
    link. Falta replicar nos que restaram; é limpeza à parte.
 2. **H2 é em memória:** reiniciar o backend **regenera todos os ids**. Nenhum
-   teste pode fixar UUID; os smoke descobrem o livro via `GET /books`.
+   teste pode fixar UUID; os smoke descobrem o livro via `GET /books` e **criam
+   os pedidos que vão usar** — supor que o histórico já tem algo faz o teste
+   passar calado num banco novo, que é pior que falhar.
+3. **`DropdownMenuItem` é a exceção ao ponto 1.** "Meus pedidos" usa
+   `render={<Link/>}` **de propósito**: um item de menu precisa manter o papel
+   `menuitem` e o teclado do menu, e é isso que o `render` preserva. A troca por
+   âncora estilizada vale para CTA, não aqui.
 
 ⚠️ **Aviso do build (não urgente):** o Next 16 marca `middleware.ts` como
 convenção **deprecada** em favor de `proxy.ts`. Só um rename + ajuste de
-assinatura, mas mexe no núcleo da renovação de token — fazer isoladamente, não
-no meio da etapa do catálogo.
+assinatura, mas mexe no núcleo da renovação de token — fazer isoladamente, numa
+etapa só dele.
 
 ## Decisões fixadas (2026-07-24)
 

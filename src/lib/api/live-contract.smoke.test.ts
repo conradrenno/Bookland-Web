@@ -16,9 +16,15 @@ import { listCategories, listCategoryBooks } from "./categories";
 import { apiFetch } from "./client";
 import { ErrorCodes } from "./error-codes";
 import { isApiError } from "./errors";
-import { checkout, getOrder } from "./orders";
+import { cancelOrder, checkout, getOrder, listOrders } from "./orders";
 import { getOrderPayment } from "./payments";
-import type { BookViewModel, PageResult, TokenViewModel } from "./types";
+import type {
+  BookViewModel,
+  OrderSummaryViewModel,
+  OrderViewModel,
+  PageResult,
+  TokenViewModel,
+} from "./types";
 
 /** An id of the right shape that nothing is seeded with. */
 const ABSENT_ID = "00000000-0000-0000-0000-000000000000";
@@ -448,5 +454,180 @@ describe("live checkout smoke", () => {
     for (const { path, value } of dates) {
       expect(`${path}=${value}`).toMatch(CARRIES_ZONE);
     }
+  });
+});
+
+/**
+ * Stage 6 — the order history and cancellation.
+ *
+ * Runs as the **customer** and really buys and cancels, like the block above.
+ * Each test creates the orders it needs rather than sharing them: the dev
+ * database is in-memory, so the account's history grows through the file and
+ * nothing may assume a count.
+ */
+describe("live orders smoke", () => {
+  let token: string;
+  let book: BookViewModel;
+
+  beforeAll(async () => {
+    token = await signInAs(CUSTOMER);
+    const { content } = await searchBooks({ size: 20 });
+    book = content.find((candidate) => candidate.stockQuantity > 5)!;
+    expect(book).toBeDefined();
+  });
+
+  /** Buys one copy as whoever holds `as`, and returns the resulting order. */
+  async function buyOne(as: string = token): Promise<OrderViewModel> {
+    const current = await getCart(as);
+    for (const item of current.items) {
+      await removeCartItem(as, item.bookId);
+    }
+    await addCartItem(as, book.id, 1);
+    return checkout(as, "PIX");
+  }
+
+  /**
+   * An order belonging to the admin, for the isolation tests.
+   *
+   * Buys one rather than reading whatever is there: H2 is in-memory, so a fresh
+   * backend has no admin orders at all and the assertion would be skipped
+   * silently instead of failing loudly.
+   */
+  async function foreignOrder(): Promise<{ adminToken: string; order: OrderViewModel }> {
+    const adminToken = await signIn();
+    return { adminToken, order: await buyOne(adminToken) };
+  }
+
+  it("lists newest first", async () => {
+    // The backend fixed this on 2026-08-05 (932727f). Before, the query ran with
+    // no ORDER BY and the customer's newest order landed on the *last* page.
+    const older = await buyOne();
+    const newer = await buyOne();
+
+    const { content } = await listOrders(token, { size: 50 });
+    const positionOf = (id: string) => content.findIndex((order) => order.id === id);
+
+    expect(positionOf(newer.id)).toBeGreaterThanOrEqual(0);
+    expect(positionOf(newer.id)).toBeLessThan(positionOf(older.id));
+    expect(content[0].id).toBe(newer.id);
+  });
+
+  it("pages without losing or repeating an order", async () => {
+    // What the `id` tiebreaker buys us. These orders are created milliseconds
+    // apart and can share a `createdAt`; without a stable tiebreaker one would
+    // vanish from both pages while another appeared in both.
+    await buyOne();
+    await buyOne();
+    await buyOne();
+
+    const whole = await listOrders(token, { size: 50 });
+    const paged: string[] = [];
+    for (let page = 0; page * 2 < whole.totalElements; page += 1) {
+      const slice = await listOrders(token, { page, size: 2 });
+      paged.push(...slice.content.map((order) => order.id));
+    }
+
+    expect(paged).toEqual(whole.content.map((order) => order.id));
+    expect(new Set(paged).size).toBe(paged.length);
+  });
+
+  it("ignores a sort parameter instead of failing on it", async () => {
+    // The route never read one. Asserted so that "sort stopped working" can
+    // never be mistaken for a regression on our side.
+    const [plain, sorted] = await Promise.all([
+      listOrders(token, { size: 5 }),
+      apiFetch<PageResult<OrderSummaryViewModel>>("/api/v1/orders?size=5&sort=createdAt,asc", {
+        accessToken: token,
+      }),
+    ]);
+
+    expect(sorted.content.map((order) => order.id)).toEqual(
+      plain.content.map((order) => order.id),
+    );
+  });
+
+  it("honours ?size literally, which is why the BFF caps it", async () => {
+    const page = await listOrders(token, { size: 1000 });
+
+    expect(page.size).toBe(1000);
+  });
+
+  it("answers a page past the end with an empty list, not a 404", async () => {
+    const page = await listOrders(token, { page: 99, size: 10 });
+
+    expect(page.content).toEqual([]);
+  });
+
+  it("cancels a confirmed order and refunds it, answering 200 with the order", async () => {
+    const order = await buyOne();
+
+    const cancelled = await cancelOrder(token, order.id);
+
+    // Named DELETE, answers the whole updated order.
+    expect(cancelled.id).toBe(order.id);
+    expect(cancelled.status).toBe("CANCELLED");
+    expect(cancelled.statusHistory).toContainEqual(
+      expect.objectContaining({ fromStatus: "CONFIRMED", toStatus: "CANCELLED" }),
+    );
+
+    // The refund is automatic — nothing asked for it.
+    const payment = await getOrderPayment(token, order.id);
+    expect(payment.status).toBe("REFUNDED");
+  });
+
+  it("keeps a cancelled order in the history rather than hiding it", async () => {
+    const order = await buyOne();
+    await cancelOrder(token, order.id);
+
+    const { content } = await listOrders(token, { size: 50 });
+
+    expect(content.find((row) => row.id === order.id)?.status).toBe("CANCELLED");
+  });
+
+  it("refuses a second cancellation with 409 ORDER_CANCELLATION_NOT_ALLOWED", async () => {
+    // What a slow double click answers, and the copy the dialog shows.
+    const order = await buyOne();
+    await cancelOrder(token, order.id);
+
+    const error = await cancelOrder(token, order.id).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(409);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_CANCELLATION_NOT_ALLOWED);
+  });
+
+  it("hides another customer's order behind 403 ORDER_ACCESS_DENIED", async () => {
+    // A 403, not a 404 — measured 2026-08-05. The page still renders "not
+    // found", so as not to confirm the id to a stranger, but the distinction has
+    // to stay visible at this layer.
+    const { order } = await foreignOrder();
+
+    const error = await getOrder(token, order.id).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(403);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_ACCESS_DENIED);
+    // A permission failure, not a dead session: it must not trigger a refresh.
+    expect(isApiError(error) && error.isSessionProblem).toBe(false);
+  });
+
+  it("refuses to cancel another customer's order, leaving it untouched", async () => {
+    const { adminToken, order } = await foreignOrder();
+
+    const error = await cancelOrder(token, order.id).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.ORDER_ACCESS_DENIED);
+    // The important half: the refusal is real, not cosmetic.
+    const stillThere = await getOrder(adminToken, order.id);
+    expect(stillThere.status).toBe(order.status);
+  });
+
+  it("400s a malformed order id, naming the parameter", async () => {
+    const error = await apiFetch("/api/v1/orders/nao-e-uuid", {
+      method: "DELETE",
+      accessToken: token,
+    }).catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.status).toBe(400);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.INVALID_PARAMETER);
+    expect(isApiError(error) && error.messagesFor("orderId")).toBeDefined();
   });
 });
