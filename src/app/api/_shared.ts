@@ -81,6 +81,29 @@ export function isValidBookId(value: unknown): value is UUID {
 }
 
 /**
+ * Same check, different noun.
+ *
+ * Kept as its own pair rather than a generic `invalidId(label)` because the
+ * message is the whole point: "Livro inválido" and "Pedido inválido" are what
+ * the customer reads, and threading a label through would make the call sites
+ * less obvious than the duplication saves.
+ *
+ * Upstream *does* name the field here — `400 INVALID_PARAMETER` with
+ * `errors.orderId: ["must be a valid UUID"]` — but it is still refused locally:
+ * a round trip to learn what `isUuid` already knows is a round trip wasted.
+ */
+export function isValidOrderId(value: unknown): value is UUID {
+  return typeof value === "string" && isUuid(value);
+}
+
+export function invalidOrderId(): NextResponse {
+  return NextResponse.json(
+    { code: ErrorCodes.INVALID_PARAMETER, message: "Pedido inválido." },
+    { status: 400 },
+  );
+}
+
+/**
  * Whether a value is a usable quantity: a whole number at or above `min`.
  *
  * `Number.isInteger` rather than a `typeof` check on purpose — JSON happily

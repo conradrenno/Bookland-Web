@@ -52,6 +52,18 @@ describe("AccountMenu", () => {
     expect(screen.getByText(USER.email)).toBeInTheDocument();
   });
 
+  it("links to the order history, keeping menu semantics", async () => {
+    // Arrived with stage 6, once `/orders` existed. It stays a `menuitem` — the
+    // menu's keyboard handling depends on the role, so this is the one place
+    // where `render={<Link/>}` beats a styled anchor.
+    render(<AccountMenu user={USER} />);
+
+    await openMenu();
+
+    const orders = await screen.findByRole("menuitem", { name: "Meus pedidos" });
+    expect(orders).toHaveAttribute("href", "/orders");
+  });
+
   it("signs out through the BFF and refreshes the server-rendered header", async () => {
     server.use(http.post(LOGOUT_ROUTE, () => new HttpResponse(null, { status: 204 })));
     render(<AccountMenu user={USER} />);

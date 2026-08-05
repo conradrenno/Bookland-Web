@@ -4,11 +4,11 @@ import { Suspense } from "react";
 
 import { BookCard } from "@/components/catalog/book-card";
 import { CatalogFilters } from "@/components/catalog/catalog-filters";
-import { Pagination } from "@/components/catalog/pagination";
 import { Button } from "@/components/ui/button";
+import { Pagination } from "@/components/ui/pagination";
 import { parseBookSearchParams, searchBooks, type RawSearchParams } from "@/lib/api/books";
 import { listCategories } from "@/lib/api/categories";
-import { hasActiveFilters } from "@/lib/catalog/search-href";
+import { buildCatalogHref, hasActiveFilters } from "@/lib/catalog/search-href";
 import { isSignedIn } from "@/lib/auth/server";
 
 export const metadata: Metadata = {
@@ -74,7 +74,14 @@ export default async function CatalogPage({ searchParams }: CatalogPageProps) {
             ))}
           </ul>
 
-          <Pagination params={params} page={books.page} totalPages={books.totalPages} />
+          {/* The pager knows nothing about filters; `buildCatalogHref` is what
+              carries the active ones into every page link. */}
+          <Pagination
+            page={books.page}
+            totalPages={books.totalPages}
+            hrefFor={(page) => buildCatalogHref(params, { page })}
+            label="Paginação do catálogo"
+          />
         </>
       )}
     </div>

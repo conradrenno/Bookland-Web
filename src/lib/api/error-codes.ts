@@ -63,6 +63,19 @@ export const ErrorCodes = {
   CART_NOT_FOUND: "CART_NOT_FOUND",
   /** 404 from `GET /orders/{orderId}` for an id that does not exist. */
   ORDER_NOT_FOUND: "ORDER_NOT_FOUND",
+  /**
+   * 409 from `DELETE /orders/{orderId}` when the status forbids cancelling —
+   * already `CANCELLED`, or past `SHIPPED`. What a second click answers, which
+   * makes it the likeliest failure of the cancel flow (verified 2026-08-05).
+   */
+  ORDER_CANCELLATION_NOT_ALLOWED: "ORDER_CANCELLATION_NOT_ALLOWED",
+  /**
+   * 403 on another customer's order — reads *and* cancels alike, with the target
+   * order left untouched (verified 2026-08-05). Note this is a **403, not a
+   * 404**; the UI still shows "not found", so as not to confirm to a stranger
+   * that the id is a real order. See docs/specs/20-orders-history.md.
+   */
+  ORDER_ACCESS_DENIED: "ORDER_ACCESS_DENIED",
 
   // --- server (500) ---------------------------------------------------------
   INTERNAL_ERROR: "INTERNAL_ERROR",

@@ -1,43 +1,45 @@
 import { ChevronLeft, ChevronRight } from "lucide-react";
 import Link from "next/link";
 
-import type { BookSearchParams } from "@/lib/api/types";
-import { buildCatalogHref } from "@/lib/catalog/search-href";
 import { cn } from "@/lib/utils";
 
 /** How many numbered pages to show around the current one. */
 const WINDOW = 2;
 
 interface PaginationProps {
-  params: BookSearchParams;
   /** Zero-based, as the contract counts them. */
   page: number;
   totalPages: number;
-  path?: string;
+  /** Builds the URL for a page. The caller owns what else the query carries. */
+  hrefFor: (page: number) => string;
+  /** Names the thing being paged, for the landmark: "Paginação do catálogo". */
+  label: string;
 }
 
 /**
- * Pager for the catalogue listing.
+ * Pager for any server-rendered listing.
  *
  * Plain links, no client JavaScript: each page is a real URL that can be shared,
- * opened in a new tab and crawled — which is the point of rendering the
- * catalogue on the server at all.
+ * opened in a new tab and crawled — which is the point of rendering on the
+ * server at all.
+ *
+ * Lived in `components/catalog/` until the order history needed the same thing
+ * (stage 6). What made it catalogue-specific was building hrefs itself, from
+ * `BookSearchParams`; `hrefFor` hands that back to the caller, who is the only
+ * one who knows whether a page link should also carry filters, a sort, or
+ * nothing at all.
  *
  * Pages are zero-based in the contract and one-based on screen. Nobody asks for
  * "page 0", so the translation happens here rather than leaking into the URL.
  */
-export function Pagination({ params, page, totalPages, path }: PaginationProps) {
+export function Pagination({ page, totalPages, hrefFor, label }: PaginationProps) {
   if (totalPages <= 1) return null;
 
   const pages = pageWindow(page, totalPages);
 
   return (
-    <nav aria-label="Paginação do catálogo" className="flex items-center justify-center gap-1 pt-4">
-      <Step
-        direction="previous"
-        href={buildCatalogHref(params, { page: page - 1 }, path)}
-        disabled={page === 0}
-      />
+    <nav aria-label={label} className="flex items-center justify-center gap-1 pt-4">
+      <Step direction="previous" href={hrefFor(page - 1)} disabled={page === 0} />
 
       {pages.map((entry, index) =>
         entry === null ? (
@@ -47,18 +49,14 @@ export function Pagination({ params, page, totalPages, path }: PaginationProps) 
         ) : (
           <PageLink
             key={entry}
-            href={buildCatalogHref(params, { page: entry }, path)}
+            href={hrefFor(entry)}
             number={entry + 1}
             current={entry === page}
           />
         ),
       )}
 
-      <Step
-        direction="next"
-        href={buildCatalogHref(params, { page: page + 1 }, path)}
-        disabled={page >= totalPages - 1}
-      />
+      <Step direction="next" href={hrefFor(page + 1)} disabled={page >= totalPages - 1} />
     </nav>
   );
 }

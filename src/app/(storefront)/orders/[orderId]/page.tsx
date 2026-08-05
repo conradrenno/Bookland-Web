@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { notFound, redirect } from "next/navigation";
 
+import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 import { OrderItems } from "@/components/orders/order-items";
 import { OrderPayment } from "@/components/orders/order-payment";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
@@ -13,6 +14,7 @@ import type { OrderViewModel, PaymentViewModel } from "@/lib/api/types";
 import { isUuid } from "@/lib/api/uuid";
 import { getAccessToken } from "@/lib/auth/server";
 import { formatDate, formatPrice } from "@/lib/format";
+import { isCancellable } from "@/lib/orders/status";
 
 /** How much of the UUID a customer is asked to read out. */
 const SHORT_ID_LENGTH = 8;
@@ -58,8 +60,8 @@ export default async function OrderPage({ params }: OrderPageProps) {
   return (
     <div className="mx-auto w-full max-w-4xl px-4 py-8 sm:py-12">
       <nav aria-label="Trilha" className="mb-6 text-sm text-muted-foreground">
-        <Link href="/" className="hover:text-primary">
-          Catálogo
+        <Link href="/orders" className="hover:text-primary">
+          Meus pedidos
         </Link>
         <span aria-hidden> · </span>
         <span className="text-foreground">Pedido {shortId(order.id)}</span>
@@ -100,6 +102,13 @@ export default async function OrderPage({ params }: OrderPageProps) {
           {/* Absent when the payment lookup failed — a missing panel, not a
               broken page. */}
           {payment && <OrderPayment payment={payment} />}
+
+          {/* Below the payment on purpose: the customer should read what they
+              are about to have refunded before finding the button that does it.
+              The status map decides, so the button never reasons about it. */}
+          {isCancellable(order.status) && (
+            <CancelOrderButton orderId={order.id} totalAmount={order.totalAmount} />
+          )}
 
           <Link
             href="/"
