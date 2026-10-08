@@ -46,16 +46,26 @@
 
 ## Etapas
 
-### Etapa 1 — backend: registrar o BFF no servidor de autorização
+### Etapa 1 — backend: registrar o BFF no servidor de autorização ✅
 
-No repositório do backend (`bookland`), só configuração:
+**Feita em 2026-10-08** (backend `3f34b2d`).
 
-- [ ] Redirect URI `http://127.0.0.1:3000/api/auth/callback` (dev em `application.yml`, compose em
+- [x] Redirect URI `http://127.0.0.1:3000/api/auth/callback` (dev em `application.yml`, compose em
       `OAUTH2_CLIENT_REDIRECT_URIS`).
-- [ ] Post-logout redirect URI `http://127.0.0.1:3000/`.
-- [ ] Remover as URIs de `127.0.0.1:8080` que sobraram da época em que a 8080 era a API.
-- [ ] Teste de integração no serviço de identidade provando que o client aceita o callback do BFF e
-      recusa um redirect não registrado.
+- [x] Post-logout redirect URI `http://127.0.0.1:3000/` (compose: `OAUTH2_CLIENT_POST_LOGOUT_REDIRECT_URIS`,
+      que antes nem era repassada ao contêiner).
+- [x] Removidas as URIs de `127.0.0.1:8080`.
+- [x] `AuthorizationCodeFlowIntegrationTest` agora faz o fluxo com o callback do BFF, e ganhou: redirect
+      não registrado → **400 sem redirecionar**; `/connect/logout` com `id_token_hint` → **302 para
+      `http://127.0.0.1:3000/`**.
+
+**Achado: o logout OIDC nunca tinha funcionado.** Para um usuário logado, `/connect/logout` exige que
+o `id_token` traga um `sid` igual ao da sessão — e os tokens saíam **sem `sid`**: o servidor procura a
+sessão de login pelo objeto principal (`SessionRegistry`), e o principal do Bookland não tinha
+`equals`/`hashCode`. Corrigido no backend (igualdade pelo id do usuário; o cadastro passou a registrar
+o fator senha, de onde sai o `auth_time`). **Consequência para a etapa 3:** o logout do BFF pode usar
+`/connect/logout` com `id_token_hint` como planejado — conferido em teste. Atenção a um detalhe do
+servidor: num `GET`, ele lê os parâmetros **só da query string**.
 
 ⚠️ O `ClientBootstrap` **só cria** o client se ele não existe. No dev (H2) a mudança vale na próxima
 subida; no compose, exige `docker compose down -v` (ou atualizar a linha de `oauth2_registered_client`).
