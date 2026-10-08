@@ -3,6 +3,17 @@
 > Handoff gerado para dar contexto imediato à próxima sessão do Claude Code.
 > Abra a sessão **nesta pasta** (`bookland-web`) para o contexto nascer isolado.
 
+## ⚠️ Leia antes de tudo (2026-10-08)
+
+O backend mudou muito desde agosto: virou **5 serviços** (gateway `:8080`, API `:8083`, catálogo
+`:8082`, identidade `:9000`, notificação), o login virou **OAuth2 authorization code + PKCE** (as
+rotas `/auth/login`, `/refresh`, `/logout` **não existem mais**) e o checkout virou **saga
+assíncrona** (202 com o pedido `PENDING`). **A seção "API Bookland — referência" abaixo descreve o
+backend de julho.** O plano de alinhamento é a
+[`docs/specs/21-backend-alignment.md`](docs/specs/21-backend-alignment.md): **etapa 1 feita** (no
+backend, `3f34b2d`), **próxima: etapa 2** (baixar os 3 OpenAPI — 8083, 8082 e 9000 `/api-docs` —
+e atualizar `types.ts`, `error-codes.ts` e `.env.example`). Precisa dos serviços rodando.
+
 ## O que é este projeto
 
 Frontend **+ BFF** em **Next.js (App Router)** que serve de camada para a API de
@@ -147,8 +158,12 @@ Fase 2: wishlist, área de conta, painel admin.
 - [x] **Etapa 6 (2026-08-05):** `/orders` (histórico paginado) e o
       **cancelamento** com diálogo — fecha US-15 e US-16.
       **435 unit + 41 smoke verdes.** → [`20-orders-history.md`](docs/specs/20-orders-history.md)
-- [ ] **Próxima:** **reviews na página do livro** ([04](docs/specs/04-reviews.md)) —
-      é o que falta do MVP fora do caminho de compra
+- [x] **Alinhamento, etapa 1 (2026-10-08):** BFF registrado no servidor de autorização (backend
+      `3f34b2d`); o logout OIDC do backend foi corrigido no caminho.
+      → [`21-backend-alignment.md`](docs/specs/21-backend-alignment.md)
+- [ ] **Próxima: alinhamento, etapa 2** (contrato) — depois 3 (auth OAuth2), 4 (checkout
+      assíncrono), 5 (ajustes). Reviews na página do livro
+      ([04](docs/specs/04-reviews.md)) ficam para depois do alinhamento
 - [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
       (`stockQuantity` primitivo — e **item 26**, o mesmo defeito em
       `AddCartItemRequest.quantity`). Cosmético: itens 16 e 20.
