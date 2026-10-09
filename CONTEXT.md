@@ -30,7 +30,7 @@ Papéis do Next aqui:
 - **OpenAPI JSON (caminho customizado!):** `http://localhost:8080/api-docs`
   - ⚠️ **Não** é o default `/v3/api-docs` — esse retorna **403**. O correto é `/api-docs`.
   - Spec é gerado em runtime (não existe arquivo no projeto Java).
-- **Spec salvo localmente:** [`docs/bookland-openapi.json`](docs/bookland-openapi.json)
+- **Spec salvo localmente:** ~~`docs/bookland-openapi.json`~~ → desde 2026-10-09, um por serviço em [`docs/openapi/`](docs/openapi/) (ver spec 21)
   - OpenAPI **3.1.0** · **39 endpoints** · **38 schemas** (salvo sem BOM, indentado)
   - Para atualizar: rebaixar o conteúdo de `http://localhost:8080/api-docs`.
   - **Atualização 2026-07-25:** `BookViewModel`/`Create`/`UpdateBookRequest` ganharam
@@ -110,7 +110,7 @@ Fase 2: wishlist, área de conta, painel admin.
 
 | Fonte | Responde | Status |
 |---|---|---|
-| OpenAPI (`docs/bookland-openapi.json`) | contrato: endpoints, DTOs, tipos, erros | ✅ capturado |
+| OpenAPI (`docs/openapi/*.json`) | contrato: endpoints, DTOs, tipos, erros | ✅ capturado |
 | Linear (user stories) | escopo, regras de negócio, jornada, prioridade | ✅ lido (team REN, projeto Bookland, 27 stories) |
 | Specs em `docs/specs/*.md` | decisões do dono (escopo, auth, SSR vs client, design) | ✅ geradas (ver `docs/specs/README.md`) |
 

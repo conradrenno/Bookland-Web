@@ -31,6 +31,7 @@ function order(overrides: Partial<OrderViewModel> = {}): OrderViewModel {
       },
     ],
     status: "CONFIRMED",
+    statusReason: null,
     totalAmount: 139.8,
     statusHistory: [
       {

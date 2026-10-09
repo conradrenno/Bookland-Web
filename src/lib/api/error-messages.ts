@@ -30,7 +30,14 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.INSUFFICIENT_STOCK]: "Não temos essa quantidade em estoque.",
   [ErrorCodes.BOOK_NOT_IN_CART]: "Este item não está mais no seu carrinho.",
   [ErrorCodes.CART_NOT_FOUND]: "Seu carrinho está vazio.",
+  [ErrorCodes.CART_EMPTY]: "Seu carrinho está vazio.",
   [ErrorCodes.BOOK_NOT_FOUND]: "Este livro não está mais no catálogo.",
+
+  // Checkout
+  [ErrorCodes.CHECKOUT_IN_PROGRESS]:
+    "Você já tem um pedido sendo processado. Aguarde a confirmação antes de fazer outro.",
+  [ErrorCodes.CATALOG_UNAVAILABLE]:
+    "Não conseguimos consultar o catálogo agora. Tente novamente em instantes.",
   // Orders. `ORDER_ACCESS_DENIED` (403, someone else's order) deliberately
   // shares the copy of the 404: telling a stranger "you may not see this" would
   // confirm that the id is a real order, and the customer cannot act on the
@@ -38,6 +45,11 @@ const MESSAGES: Partial<Record<string, string>> = {
   [ErrorCodes.ORDER_NOT_FOUND]: "Pedido não encontrado.",
   [ErrorCodes.ORDER_ACCESS_DENIED]: "Pedido não encontrado.",
   [ErrorCodes.ORDER_CANCELLATION_NOT_ALLOWED]: "Este pedido não pode mais ser cancelado.",
+  [ErrorCodes.PAYMENT_NOT_FOUND]: "O pagamento deste pedido ainda não foi iniciado.",
+
+  // Reviews
+  [ErrorCodes.DUPLICATE_REVIEW]: "Você já avaliou este livro.",
+  [ErrorCodes.PURCHASE_REQUIRED]: "Só é possível avaliar livros que você recebeu.",
 
   // Request shape
   [ErrorCodes.VALIDATION_ERROR]: "Verifique os campos destacados.",
@@ -47,6 +59,9 @@ const MESSAGES: Partial<Record<string, string>> = {
   // Transport
   [ErrorCodes.NETWORK_ERROR]: "Não foi possível conectar. Verifique sua internet e tente novamente.",
   [ErrorCodes.TIMEOUT]: "O servidor demorou para responder. Tente novamente.",
+  [ErrorCodes.UPSTREAM_TIMEOUT]: "O servidor demorou para responder. Tente novamente.",
+  [ErrorCodes.UPSTREAM_UNAVAILABLE]:
+    "Um dos nossos serviços está fora do ar. Tente novamente em instantes.",
 };
 
 /**

@@ -98,12 +98,19 @@ servidor: num `GET`, ele lê os parâmetros **só da query string**.
 ⚠️ O `ClientBootstrap` **só cria** o client se ele não existe. No dev (H2) a mudança vale na próxima
 subida; no compose, exige `docker compose down -v` (ou atualizar a linha de `oauth2_registered_client`).
 
-### Etapa 2 — contrato e configuração do BFF
+### Etapa 2 — contrato e configuração do BFF ✅
 
-- [ ] **OpenAPI:** baixar `:8083/api-docs`, `:8082/api-docs` e `:9000/api-docs` (o gateway não roteia
+**Feita em 2026-10-09**, contra a stack do compose. Os schemas dos três documentos batem com o
+`types.ts` fora o que já estava previsto. Duas coisas foram adiantadas da etapa 4 porque o
+`Record<OrderStatus, …>`/`Record<PaymentStatus, …>` não compila sem elas: `lib/orders/status.ts`
+(`PENDING`, `REJECTED`, cancelável só em `CONFIRMED`) e `lib/payments/labels.ts` (estornos).
+No compose, o segredo do client é o `OAUTH2_CLIENT_SECRET` do `.env` do backend, não o
+`bookland-web-secret` do perfil dev — vai no `.env.local` do BFF.
+
+- [x] **OpenAPI:** baixar `:8083/api-docs`, `:8082/api-docs` e `:9000/api-docs` (o gateway não roteia
       `/api-docs`) para `docs/openapi/{api,catalog,identity}.json`; apagar `docs/bookland-openapi.json`.
       ⚠️ Exige os serviços no ar — **avisar o dono antes**.
-- [ ] `lib/api/types.ts`
+- [x] `lib/api/types.ts`
   - `OrderStatus` + `PENDING`, `REJECTED`; `OrderViewModel` + `statusReason: string | null`.
   - `StatusTransitionViewModel.changedBy: UUID | null` (R6).
   - `PaymentStatus` + `REFUND_PENDING`, `REFUND_FAILED`.
@@ -112,18 +119,18 @@ subida; no compose, exige `docker compose down -v` (ou atualizar a linha de `oau
   - Novos: `RegisteredUserViewModel` (`id`, `email`, `name`, `role`) e `OAuthTokenResponse`
     (`access_token`, `refresh_token`, `id_token`, `token_type`, `expires_in`, `scope`).
   - `TokenViewModel`, `LoginRequest`, `RefreshTokenRequest` e `LogoutRequest` **ficam até a etapa 3**.
-- [ ] `lib/api/error-codes.ts`: entram `CART_EMPTY`, `CHECKOUT_IN_PROGRESS`, `CATALOG_UNAVAILABLE`,
+- [x] `lib/api/error-codes.ts`: entram `CART_EMPTY`, `CHECKOUT_IN_PROGRESS`, `CATALOG_UNAVAILABLE`,
       `ORDERS_UNAVAILABLE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE` e os de R11; `REFRESHABLE_CODES`
       só com `TOKEN_EXPIRED` (R1). `INVALID_CREDENTIALS`/`INVALID_REFRESH_TOKEN` saem na etapa 3.
-- [ ] `lib/api/error-messages.ts`: mensagens em português para os novos códigos.
-- [ ] `lib/config.ts` + `.env.example`: `IDENTITY_BASE_URL` (`BOOKLAND_IDENTITY_URL`, default
+- [x] `lib/api/error-messages.ts`: mensagens em português para os novos códigos.
+- [x] `lib/config.ts` + `.env.example`: `IDENTITY_BASE_URL` (`BOOKLAND_IDENTITY_URL`, default
       `http://127.0.0.1:9000`), `OAUTH_CLIENT_ID` (`BOOKLAND_OAUTH_CLIENT_ID`, default `bookland-web`),
       `OAUTH_CLIENT_SECRET` (`BOOKLAND_OAUTH_CLIENT_SECRET`, só servidor, sem default fora do dev),
       `BFF_BASE_URL` (`BOOKLAND_BFF_URL`, default `http://127.0.0.1:3000`); `COOKIE` ganha `id`
       (`bl_id`) e `oauth` (`bl_oauth`). `BOOKLAND_API_URL` e `NEXT_PUBLIC_BOOKLAND_MEDIA_URL` continuam
       no `:8080` (R10).
-- [ ] `package.json`: `"dev": "next dev -H 127.0.0.1"` (decisão 5).
-- [ ] `lib/api/client.ts`: opção `baseUrl` no `apiFetch` (o registro vai à identidade, não ao gateway),
+- [x] `package.json`: `"dev": "next dev -H 127.0.0.1"` (decisão 5).
+- [x] `lib/api/client.ts`: opção `baseUrl` no `apiFetch` (o registro vai à identidade, não ao gateway),
       em vez de um segundo cliente.
 
 ### Etapa 3 — autenticação OAuth2 (a maior)
@@ -216,10 +223,10 @@ Por arquivo:
       link para `/orders` (o erro não traz o id do pedido); `CATALOG_UNAVAILABLE`, `UPSTREAM_TIMEOUT`
       e `UPSTREAM_UNAVAILABLE` → alerta "tente de novo". No sucesso, o `router.refresh()` deixa de ser
       para "zerar o badge" — o carrinho só esvazia no `CONFIRMED`, e quem atualiza é o `order-progress`.
-- [ ] `lib/orders/status.ts`: `PENDING` "Processando", `REJECTED` "Recusado"; **cancelável só em
+- [x] (adiantado para a etapa 2) `lib/orders/status.ts`: `PENDING` "Processando", `REJECTED` "Recusado"; **cancelável só em
       `CONFIRMED`** (`AWAITING_PAYMENT` deixa de ser). Atualizar os comentários.
 - [ ] `status-timeline.tsx`: o histórico novo (R6) e `changedBy` nulo.
-- [ ] `lib/payments/labels.ts`: `REFUND_PENDING` "Estorno em andamento", `REFUND_FAILED`
+- [x] (adiantado para a etapa 2) `lib/payments/labels.ts`: `REFUND_PENDING` "Estorno em andamento", `REFUND_FAILED`
       "Estorno com problema".
 - [ ] `cancel-order-button.tsx`: o diálogo continua certo (cancelar `CONFIRMED` estorna), mas o
       estorno agora é assíncrono — dizer "o estorno será processado".

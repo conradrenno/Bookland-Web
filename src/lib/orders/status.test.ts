@@ -4,12 +4,14 @@ import type { OrderStatus } from "@/lib/api/types";
 import { describeOrderStatus, isCancellable } from "./status";
 
 const ALL: OrderStatus[] = [
+  "PENDING",
   "AWAITING_PAYMENT",
   "CONFIRMED",
   "SHIPPED",
   "DELIVERED",
   "CANCELLED",
   "PAYMENT_FAILED",
+  "REJECTED",
 ];
 
 describe("describeOrderStatus", () => {
@@ -40,11 +42,14 @@ describe("describeOrderStatus", () => {
 });
 
 describe("isCancellable", () => {
-  it("allows cancelling before dispatch", () => {
-    // Backend README, confirmed live: AWAITING_PAYMENT or CONFIRMED. Since
-    // checkout hands back a CONFIRMED order, every new order starts cancellable.
-    expect(isCancellable("AWAITING_PAYMENT")).toBe(true);
+  it("allows cancelling only a confirmed order", () => {
     expect(isCancellable("CONFIRMED")).toBe(true);
+  });
+
+  it("refuses while the checkout is still running", () => {
+    // The backend answers ORDER_CANCELLATION_NOT_ALLOWED for both (docs/specs/21).
+    expect(isCancellable("PENDING")).toBe(false);
+    expect(isCancellable("AWAITING_PAYMENT")).toBe(false);
   });
 
   it("refuses once the order left, ended or failed", () => {
@@ -52,6 +57,7 @@ describe("isCancellable", () => {
     expect(isCancellable("DELIVERED")).toBe(false);
     expect(isCancellable("CANCELLED")).toBe(false);
     expect(isCancellable("PAYMENT_FAILED")).toBe(false);
+    expect(isCancellable("REJECTED")).toBe(false);
   });
 
   it("never offers the action for a status it does not know", () => {

@@ -29,13 +29,52 @@ export const MEDIA_BASE_URL = (
 export const API_TIMEOUT_MS = Number(process.env.BOOKLAND_API_TIMEOUT_MS ?? 10_000);
 
 /**
- * Cookie names for the JWT pair. The browser only ever sees httpOnly cookies —
- * it can read neither token from JS. The BFF reads them server-side to attach
- * the Authorization header to upstream calls (see `lib/api/client.ts`).
+ * Base URL of the identity service — the OAuth2 Authorization Server, plus
+ * `register` and the user account. **Not** behind the gateway: the token issuer
+ * has to keep the address the browser logs in on (docs/specs/21).
+ *
+ * `127.0.0.1`, not `localhost`: it is the issuer the tokens carry, and the
+ * server refuses `localhost` redirect URIs (RFC 8252).
+ */
+export const IDENTITY_BASE_URL = (
+  process.env.BOOKLAND_IDENTITY_URL ?? "http://127.0.0.1:9000"
+).replace(/\/$/, "");
+
+/**
+ * Public origin of this BFF — what the Authorization Server redirects back to.
+ * Must match a redirect URI registered for the client, character for character.
+ */
+export const BFF_BASE_URL = (process.env.BOOKLAND_BFF_URL ?? "http://127.0.0.1:3000").replace(
+  /\/$/,
+  "",
+);
+
+/** The OAuth2 client the BFF signs in as. Shared with the backend's Swagger UIs (docs/specs/21). */
+export const OAUTH_CLIENT_ID = process.env.BOOKLAND_OAUTH_CLIENT_ID ?? "bookland-web";
+
+/**
+ * The client's secret — the BFF is a **confidential** client, which is the whole
+ * point of running the flow server-side. Server-only: never prefix it with
+ * `NEXT_PUBLIC_`.
+ *
+ * No default on purpose: the backend's dev profile and its compose stack use
+ * different secrets, and guessing wrong surfaces as a baffling `invalid_client`.
+ * An empty value is caught where the secret is used.
+ */
+export const OAUTH_CLIENT_SECRET = process.env.BOOKLAND_OAUTH_CLIENT_SECRET ?? "";
+
+/**
+ * Cookie names. The browser only ever sees httpOnly cookies — it can read none
+ * of the tokens from JS. The BFF reads them server-side to attach the
+ * Authorization header to upstream calls (see `lib/api/client.ts`).
  */
 export const COOKIE = {
   access: "bl_access",
   refresh: "bl_refresh",
+  /** The OIDC id_token. Only ever sent back as `id_token_hint` at logout. */
+  id: "bl_id",
+  /** State, PKCE verifier and `next` of a login in flight. Lives ten minutes. */
+  oauth: "bl_oauth",
 } as const;
 
 /** Are we serving over HTTPS? Controls the `Secure` cookie flag. */

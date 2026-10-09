@@ -32,7 +32,7 @@ Ordem de leitura sugerida:
 
 | Fonte | Responde | Precedência |
 |---|---|---|
-| **API Bookland** (`docs/bookland-openapi.json` + Spring rodando) | Contrato **e** comportamento: endpoints, DTOs, tipos, enums, regras já implementadas | **Máxima** |
+| **API Bookland** (`docs/openapi/{api,catalog,identity}.json` + backend rodando) | Contrato **e** comportamento: endpoints, DTOs, tipos, enums, regras já implementadas | **Máxima** |
 | Linear (projeto Bookland, team REN) | Intenção original: jornada, critérios de aceitação, prioridade | Referência (pode estar desatualizada) |
 | Estas specs | Decisões do dono: escopo, auth, SSR, BFF, design | Decisões de produto |
 

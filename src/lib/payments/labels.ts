@@ -26,8 +26,13 @@ const STATUS: Record<PaymentStatus, PaymentStatusPresentation> = {
   PENDING: { label: "Processando", className: "bg-warning/15 text-warning" },
   APPROVED: { label: "Aprovado", className: "bg-success/15 text-success" },
   DECLINED: { label: "Não aprovado", className: "bg-destructive/10 text-destructive" },
-  // Reached by cancelling a confirmed order: the backend refunds automatically.
+  // Cancelling a confirmed order starts a refund, which settles asynchronously.
+  REFUND_PENDING: { label: "Estorno em andamento", className: "bg-warning/15 text-warning" },
   REFUNDED: { label: "Estornado", className: "bg-muted text-muted-foreground" },
+  REFUND_FAILED: {
+    label: "Estorno com problema",
+    className: "bg-destructive/10 text-destructive",
+  },
 };
 
 export function describePaymentStatus(status: PaymentStatus): PaymentStatusPresentation {

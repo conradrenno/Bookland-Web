@@ -120,13 +120,16 @@ describe("refresh decision", () => {
     return parseUpstreamError(problemResponse(status, { title: "t", status, code, instance }));
   }
 
-  it.each([ErrorCodes.TOKEN_EXPIRED, ErrorCodes.TOKEN_INVALID])(
-    "refreshes on %s",
-    async (code) => {
-      const error = await errorFor(401, code, "/api/v1/cart");
-      expect(error.shouldAttemptRefresh).toBe(true);
-    },
-  );
+  it("refreshes on TOKEN_EXPIRED", async () => {
+    const error = await errorFor(401, ErrorCodes.TOKEN_EXPIRED, "/api/v1/cart");
+    expect(error.shouldAttemptRefresh).toBe(true);
+  });
+
+  it("does not refresh on TOKEN_INVALID — the contract says to end the session", async () => {
+    const error = await errorFor(401, ErrorCodes.TOKEN_INVALID, "/api/v1/cart");
+    expect(error.shouldAttemptRefresh).toBe(false);
+    expect(error.isSessionProblem).toBe(true);
+  });
 
   it("does not refresh on bad login credentials", async () => {
     // A failed login is a form error; refreshing there would burn the session

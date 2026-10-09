@@ -1,7 +1,12 @@
 /**
- * DTOs mirroring the Bookland OpenAPI contract (docs/bookland-openapi.json).
- * Hand-written on purpose (learning project) — keep in sync with the spec.
- * The OpenAPI is the source of truth for shapes; Linear stories for behaviour.
+ * DTOs mirroring the Bookland OpenAPI contracts — one document per service since
+ * the backend split up: `docs/openapi/api.json` (cart, orders, payments,
+ * reviews, wishlist), `catalog.json` (books, categories, inventory) and
+ * `identity.json` (register, users). Plus the OAuth2 token response, which no
+ * OpenAPI describes because the Authorization Server's endpoints are not in it.
+ *
+ * Hand-written on purpose (learning project) — keep in sync with the documents.
+ * The API is the source of truth for shapes and rules alike.
  */
 
 // ---- Shared ---------------------------------------------------------------
@@ -33,6 +38,38 @@ export interface UserViewModel {
   active: boolean;
 }
 
+/**
+ * Answer of `POST /api/v1/auth/register` on the identity service: the account,
+ * and **no token** — signing in is a separate OAuth2 flow (docs/specs/21).
+ */
+export interface RegisteredUserViewModel {
+  id: UUID;
+  email: string;
+  name: string;
+  role: UserRole;
+}
+
+/**
+ * Answer of the Authorization Server's `POST /oauth2/token`, for both the
+ * `authorization_code` and the `refresh_token` grants. Standard OAuth2, hence
+ * the snake_case — unlike every other shape here.
+ *
+ * There is no validity for the refresh token: the server does not say, so the
+ * BFF assumes the configured 7 days (docs/specs/21).
+ */
+export interface OAuthTokenResponse {
+  access_token: string;
+  /** Single use: a refresh rotates it, and the old one is dead from then on. */
+  refresh_token: string;
+  /** Present because the client asks for `openid`. Only used as `id_token_hint` at logout. */
+  id_token: string;
+  token_type: "Bearer";
+  /** Seconds until the access token expires. */
+  expires_in: number;
+  scope: string;
+}
+
+/** @deprecated The home-grown JWT login is gone upstream; removed in stage 3 of docs/specs/21. */
 export interface TokenViewModel {
   accessToken: string;
   tokenType: string;
@@ -48,15 +85,18 @@ export interface RegisterRequest {
   password: string;
 }
 
+/** @deprecated See `TokenViewModel`. */
 export interface LoginRequest {
   email: string;
   password: string;
 }
 
+/** @deprecated See `TokenViewModel`. */
 export interface RefreshTokenRequest {
   refreshToken: string;
 }
 
+/** @deprecated See `TokenViewModel`. */
 export interface LogoutRequest {
   refreshToken: string;
 }
@@ -172,16 +212,25 @@ export interface CartItemViewModel {
   quantity: number;
   unitPrice: number;
   subtotal: number;
-  /** False once the book runs out of stock; adding it again yields CART_ITEM_UNAVAILABLE. */
+  /**
+   * False once the book runs out of stock — and also when the catalogue could not
+   * be reached, in which case the line comes back as "Unavailable" instead of the
+   * whole cart failing. Adding it again yields CART_ITEM_UNAVAILABLE.
+   */
   available: boolean;
 }
 
+/**
+ * A customer who never added anything gets an empty cart that does not exist
+ * yet: `id` and `updatedAt` come back **null**, and nothing is created upstream.
+ * Treat it as empty — it is not an error.
+ */
 export interface CartViewModel {
-  id: UUID;
+  id: UUID | null;
   customerId: UUID;
   items: CartItemViewModel[];
   total: number;
-  updatedAt: ISODateTime;
+  updatedAt: ISODateTime | null;
 }
 
 export interface AddCartItemRequest {
@@ -217,17 +266,20 @@ export interface CheckoutRequest {
 // ---- Orders ---------------------------------------------------------------
 
 /**
- * NOTE: this enum comes from the OpenAPI contract and is the source of truth.
- * The Linear stories mention a "PENDING" status that does NOT exist here — see
- * docs/specs/09-contract-notes.md for the reconciliation.
+ * The checkout is an asynchronous saga: an order is born `PENDING`, goes to
+ * `AWAITING_PAYMENT` once the stock is reserved, and ends the checkout in one of
+ * `CONFIRMED`, `REJECTED` (stock ran out meanwhile) or `PAYMENT_FAILED`.
+ * Only `CONFIRMED` may be cancelled (docs/specs/21).
  */
 export type OrderStatus =
+  | "PENDING"
   | "AWAITING_PAYMENT"
   | "CONFIRMED"
   | "SHIPPED"
   | "DELIVERED"
   | "CANCELLED"
-  | "PAYMENT_FAILED";
+  | "PAYMENT_FAILED"
+  | "REJECTED";
 
 export interface OrderItemViewModel {
   bookId: UUID;
@@ -243,7 +295,8 @@ export interface StatusTransitionViewModel {
   fromStatus: OrderStatus;
   toStatus: OrderStatus;
   changedAt: ISODateTime;
-  changedBy: UUID;
+  /** Null when the checkout saga moved the order — a process, not a person. */
+  changedBy: UUID | null;
 }
 
 export interface OrderViewModel {
@@ -251,6 +304,11 @@ export interface OrderViewModel {
   customerId: UUID;
   items: OrderItemViewModel[];
   status: OrderStatus;
+  /**
+   * Why the checkout ended the way it did: the unavailable books on `REJECTED`,
+   * the decline reason on `PAYMENT_FAILED`. Null otherwise.
+   */
+  statusReason: string | null;
   totalAmount: number;
   statusHistory: StatusTransitionViewModel[];
   createdAt: ISODateTime;
@@ -294,13 +352,21 @@ export type AdminOrderSearchParams = {
 
 export interface UpdateOrderStatusRequest {
   newStatus: OrderStatus;
-  /** Derived from the token upstream; send only if the backend starts demanding it. */
-  adminId?: UUID;
 }
 
 // ---- Payments -------------------------------------------------------------
 
-export type PaymentStatus = "PENDING" | "APPROVED" | "DECLINED" | "REFUNDED";
+/**
+ * A refund is asynchronous too: cancelling a `CONFIRMED` order moves its payment
+ * to `REFUND_PENDING`, then to `REFUNDED` or `REFUND_FAILED`.
+ */
+export type PaymentStatus =
+  | "PENDING"
+  | "APPROVED"
+  | "DECLINED"
+  | "REFUND_PENDING"
+  | "REFUNDED"
+  | "REFUND_FAILED";
 
 export interface PaymentViewModel {
   id: UUID;

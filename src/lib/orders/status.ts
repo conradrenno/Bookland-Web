@@ -17,23 +17,29 @@ export interface OrderStatusPresentation {
   /**
    * Whether the customer may cancel from here.
    *
-   * From the backend README, confirmed live in 2026-07-30: cancellation is
-   * allowed from `AWAITING_PAYMENT` or `CONFIRMED`, and cancelling a confirmed
-   * order restores stock and refunds automatically. **Nothing in stage 5b reads
-   * this** — it is what the cancel button in stage 6 will ask. The authority
+   * **Only `CONFIRMED`.** While the checkout saga is still running (`PENDING`,
+   * `AWAITING_PAYMENT`) the backend refuses with `ORDER_CANCELLATION_NOT_ALLOWED`,
+   * and once the order shipped it is too late. Cancelling a confirmed order
+   * gives the stock back and starts a refund (docs/specs/21). The authority
    * stays the `DELETE` response; this only decides whether to offer the button.
    */
   cancellable: boolean;
 }
 
 const PRESENTATION: Record<OrderStatus, OrderStatusPresentation> = {
-  // Never actually seen by a customer: checkout charges inside the same call and
-  // hands back a CONFIRMED order. Kept because it is in the contract's enum and
-  // appears in every `statusHistory`.
+  // What checkout hands back: the saga has only just started. Seconds later the
+  // order moves on, or ends as REJECTED when the stock ran out meanwhile.
+  PENDING: {
+    label: "Processando",
+    className: "bg-warning/15 text-warning",
+    cancellable: false,
+  },
+  // Stock reserved, charge in flight. Can last a while when the payment gateway
+  // is slow or down — the customer is e-mailed the outcome either way.
   AWAITING_PAYMENT: {
     label: "Aguardando pagamento",
     className: "bg-warning/15 text-warning",
-    cancellable: true,
+    cancellable: false,
   },
   CONFIRMED: {
     label: "Confirmado",
@@ -57,6 +63,12 @@ const PRESENTATION: Record<OrderStatus, OrderStatusPresentation> = {
   },
   PAYMENT_FAILED: {
     label: "Pagamento não aprovado",
+    className: "bg-destructive/10 text-destructive",
+    cancellable: false,
+  },
+  // The stock ran out while the checkout ran; `statusReason` names the books.
+  REJECTED: {
+    label: "Recusado",
     className: "bg-destructive/10 text-destructive",
     cancellable: false,
   },

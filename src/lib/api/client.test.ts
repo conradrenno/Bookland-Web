@@ -41,6 +41,22 @@ describe("apiFetch", () => {
     });
   });
 
+  it("calls another origin when given baseUrl — the identity service is off the gateway", async () => {
+    server.use(
+      http.post("http://127.0.0.1:9000/api/v1/auth/register", () =>
+        HttpResponse.json({ id: "u1" }, { status: 201 }),
+      ),
+    );
+
+    await expect(
+      apiFetch("/api/v1/auth/register", {
+        method: "POST",
+        body: {},
+        baseUrl: "http://127.0.0.1:9000",
+      }),
+    ).resolves.toEqual({ id: "u1" });
+  });
+
   it("sends query params, dropping nullish and keeping page=0", async () => {
     const seen = captureRequest("get", "/api/v1/books", () => HttpResponse.json({}));
 

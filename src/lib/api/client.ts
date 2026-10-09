@@ -32,6 +32,11 @@ export interface ApiRequestOptions {
   signal?: AbortSignal;
   /** Per-call override of `API_TIMEOUT_MS`. */
   timeoutMs?: number;
+  /**
+   * Origin to call instead of the gateway (`API_BASE_URL`). Needed for the
+   * identity service, which sits outside the gateway (docs/specs/21).
+   */
+  baseUrl?: string;
 }
 
 /** Statuses that carry no body by definition — parsing them would throw. */
@@ -44,7 +49,7 @@ const BODILESS_STATUSES: ReadonlySet<number> = new Set([204, 205, 304]);
  * need a single `catch`.
  */
 export async function apiFetch<T>(path: string, options: ApiRequestOptions = {}): Promise<T> {
-  const { method = "GET", query, body, headers, accessToken, signal, timeoutMs } = options;
+  const { method = "GET", query, body, headers, accessToken, signal, timeoutMs, baseUrl } = options;
   const effectiveTimeout = timeoutMs ?? API_TIMEOUT_MS;
 
   const timeoutController = new AbortController();
@@ -55,7 +60,7 @@ export async function apiFetch<T>(path: string, options: ApiRequestOptions = {})
     : timeoutController.signal;
 
   try {
-    const response = await fetch(buildUrl(API_BASE_URL, path, query), {
+    const response = await fetch(buildUrl(baseUrl ?? API_BASE_URL, path, query), {
       method,
       headers: buildHeaders({ headers, accessToken, hasBody: body !== undefined }),
       body: body === undefined ? undefined : JSON.stringify(body),
@@ -96,8 +101,7 @@ function buildHeaders(input: {
 /**
  * Reads a successful response.
  *
- * 204 is a real outcome here — logout, deletes and the refund endpoint all use
- * it — and calling `.json()` on an empty body throws, so it must be checked
+ * 204 is a real outcome here — every DELETE uses it — and calling `.json()` on an empty body throws, so it must be checked
  * before parsing (docs/specs/09-contract-notes.md item 15).
  */
 async function decodeBody<T>(response: Response): Promise<T | undefined> {
