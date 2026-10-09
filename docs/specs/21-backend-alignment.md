@@ -287,7 +287,10 @@ deprecação do `middleware.ts` foi resolvida na etapa 3.
 
 ## Fora desta spec
 
-- Página de login com a identidade visual da loja (no serviço de identidade).
+- ~~Página de login com a identidade visual da loja (no serviço de identidade).~~ **Feita em
+  2026-10-09** no backend (`d162e2b`): template Thymeleaf no `bookland-auth` com a paleta, as fontes
+  e o card do front, links de volta para a loja via `bookland.oauth2.storefront-url`. As cores foram
+  **copiadas à mão** do `globals.css` — mudou a identidade visual aqui, a página de lá acompanha.
 - Client OAuth próprio para o BFF.
 - Notificações na interface (hoje o cliente recebe e-mail).
 - As telas da fase 2 ([08](08-phase-2.md)).
