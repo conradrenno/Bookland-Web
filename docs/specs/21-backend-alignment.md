@@ -133,7 +133,24 @@ No compose, o segredo do client é o `OAUTH2_CLIENT_SECRET` do `.env` do backend
 - [x] `lib/api/client.ts`: opção `baseUrl` no `apiFetch` (o registro vai à identidade, não ao gateway),
       em vez de um segundo cliente.
 
-### Etapa 3 — autenticação OAuth2 (a maior)
+### Etapa 3 — autenticação OAuth2 (a maior) ✅ (falta conferir ao vivo)
+
+**Feita em 2026-10-09.** Unitários e de rota verdes; o fluxo de verdade contra a identidade ainda
+**não rodou**: a sondagem por `curl` (que cadastra um usuário e revoga tokens) e o `pnpm test:smoke`
+esperam o OK do dono. Diferenças em relação ao plano abaixo:
+
+- **Toda entrada de login é navegação completa**, não só o logout: `<a href>` ou `navigateTo`
+  (`lib/navigation.ts`, que existe para o teste poder trocá-la) para `loginHref(next)`
+  (`lib/auth/next-path.ts`). O roteador do App Router não segue um redirect para outra origem.
+  Por isso o header, o carrinho, o "Adicionar ao carrinho" deslogado e os 401 nos componentes
+  apontam direto para `/api/auth/login?next=…`, e as páginas do servidor também.
+- **Falha transitória no refresh não derruba a sessão**: só `SESSION_ENDED` (`invalid_grant`) apaga
+  os cookies; identidade fora do ar deixa o refresh token como está.
+- O código de erro do BFF ficou `SESSION_ENDED` (recusa) e `OAUTH_REJECTED` (client mal configurado,
+  500). Os motivos de `/login?error=` vivem em `lib/auth/login-failure.ts`.
+- O smoke agora cadastra os próprios clientes a cada execução (`src/test/live-login.ts`) e faz o
+  fluxo por código à mão; lê o segredo do `.env.local`. As expectativas de checkout/pedidos do smoke
+  ainda são as do checkout síncrono — mudam na etapa 4.
 
 ```
 GET  /api/auth/login?next=/x   → se o host não for o de BFF_BASE_URL, 307 para o mesmo caminho lá
@@ -160,31 +177,31 @@ POST /api/auth/register        → POST {IDENTITY}/api/v1/auth/register → 201 
 
 Por arquivo:
 
-- [ ] **Novo `lib/auth/oauth.ts`** — funções puras + `fetch` direto (o token endpoint recebe
+- [x] **Novo `lib/auth/oauth.ts`** — funções puras + `fetch` direto (o token endpoint recebe
       `application/x-www-form-urlencoded`, não JSON, então não passa pelo `apiFetch`):
       `createPkcePair()` (`crypto.getRandomValues` + `crypto.subtle.digest`, base64url),
       `buildAuthorizeUrl()`, `exchangeCode()`, `refreshTokens()`, `revokeRefreshToken()`,
       `buildEndSessionUrl()`. Um erro OAuth (`{"error":"invalid_grant"}`) vira `ApiError` 401 com o
       código `SESSION_ENDED` (só do BFF, na seção "client-side only" do `error-codes.ts`).
-- [ ] `lib/auth/cookies.ts` — `writeTokens(OAuthTokenResponse)`: access com `Max-Age = expires_in`,
+- [x] `lib/auth/cookies.ts` — `writeTokens(OAuthTokenResponse)`: access com `Max-Age = expires_in`,
       refresh e id com 7 dias (o endpoint não informa a validade do refresh); `clearTokens` apaga os
       três. Funções para ler, gravar e apagar `bl_oauth`. As opções de cookie viram uma função só,
       usada também pelo proxy (hoje estão duplicadas em `middleware.ts`).
-- [ ] `lib/auth/refresh.ts` — passa a chamar `oauth.refreshTokens` e ganha o memo de R5
+- [x] `lib/auth/refresh.ts` — passa a chamar `oauth.refreshTokens` e ganha o memo de R5
       (`Map<refresh usado, { resultado, expiraEm }>`, ≈30 s). Continua sem tocar em cookies.
-- [ ] `middleware.ts` → **`proxy.ts`** (export `proxy`, R13) — usa `renewTokens` (R5); grava os três
+- [x] `middleware.ts` → **`proxy.ts`** (export `proxy`, R13) — usa `renewTokens` (R5); grava os três
       cookies; quando não há sessão recuperável numa rota protegida, redireciona para
       `/api/auth/login?next=…` (R14). O matcher continua pulando `api/auth`.
-- [ ] `lib/auth/session.ts` — claim `name?: string` → `SessionUser.name`; `aud` ignorado. Continua
+- [x] `lib/auth/session.ts` — claim `name?: string` → `SessionUser.name`; `aud` ignorado. Continua
       sem verificar assinatura.
-- [ ] Rotas: **novas** `api/auth/callback/route.ts` e `api/auth/login/route.ts` (agora `GET`);
+- [x] Rotas: **novas** `api/auth/callback/route.ts` e `api/auth/login/route.ts` (agora `GET`);
       **reescritas** `logout` e `register`; **apagada** `api/auth/refresh/route.ts` (nenhum código do
       cliente a chama, e a renovação vive no proxy — confirmar com grep antes de apagar).
-- [ ] `lib/api/auth.ts` — fica só `register()` (contra `IDENTITY_BASE_URL`, devolvendo
+- [x] `lib/api/auth.ts` — fica só `register()` (contra `IDENTITY_BASE_URL`, devolvendo
       `RegisteredUserViewModel`). Saem `login`, `refresh` e `logout`.
-- [ ] `lib/api/auth-client.ts` — saem `signIn` e `signOut` (R3); `signUp` fica; ganha
+- [x] `lib/api/auth-client.ts` — saem `signIn` e `signOut` (R3); `signUp` fica; ganha
       `loginHref(next)`.
-- [ ] Páginas e componentes
+- [x] Páginas e componentes
   - `(auth)/login/page.tsx`: sem `?error`, `redirect()` imediato para `/api/auth/login?next=…`;
     com `?error`, mostra o motivo e um botão "Tentar de novo". `login-form.tsx` (e o teste) é apagado.
   - `register-form.tsx`: no 201, `window.location.assign(loginHref(next))` — navegação completa, não
@@ -192,11 +209,11 @@ Por arquivo:
     seguem como hoje.
   - `account-menu.tsx`: "Sair" vira `<form method="post" action="/api/auth/logout">`; saudação pelo
     `name`, com o e-mail de fallback. Os links "Entrar" do header apontam para `loginHref`.
-- [ ] `types.ts`/`error-codes.ts`/`error-messages.ts`: remover o que ficou para trás (`TokenViewModel`,
+- [x] `types.ts`/`error-codes.ts`/`error-messages.ts`: remover o que ficou para trás (`TokenViewModel`,
       `LoginRequest`, `RefreshTokenRequest`, `LogoutRequest`, `INVALID_CREDENTIALS`,
       `INVALID_REFRESH_TOKEN`).
-- [ ] Conta (`/users/{id}`), quando entrar, vai **direto no `:9000`** — não passa pelo gateway.
-- [ ] Testes
+- [x] Conta (`/users/{id}`), quando entrar, vai **direto no `:9000`** — não passa pelo gateway.
+- [x] Testes
   - unit: PKCE (vetor do RFC 7636, apêndice B), URLs de authorize e end-session, sanitização do
     `next` no callback, opções de cookie, memo do `renewTokens` (duas chamadas concorrentes = uma ao
     upstream; uma chamada tardia com o refresh velho recebe o mesmo par).

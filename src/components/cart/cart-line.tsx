@@ -15,7 +15,8 @@ import {
   type CartMutationResult,
 } from "@/lib/api/cart-client";
 import type { CartItemViewModel } from "@/lib/api/types";
-import { withNextParam } from "@/lib/auth/next-path";
+import { loginHref } from "@/lib/auth/next-path";
+import { navigateTo } from "@/lib/navigation";
 import { formatPrice } from "@/lib/format";
 
 /** The thumbnail is a fixed 5rem wide, so the optimiser needs no breakpoint list. */
@@ -61,7 +62,7 @@ export function CartLine({ item }: { item: CartItemViewModel }) {
 
     if (result.sessionExpired) {
       // Nothing they can do in place — and `/cart` itself now needs a session.
-      router.push(withNextParam("/login", pathname));
+      navigateTo(loginHref(pathname));
       return;
     }
 

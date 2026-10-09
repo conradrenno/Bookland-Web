@@ -1,33 +1,19 @@
-import { render, screen, waitFor } from "@testing-library/react";
+import { render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
-import { http, HttpResponse } from "msw";
-import { beforeEach, describe, expect, it, vi } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import type { SessionUser } from "@/lib/auth/session";
-import { server } from "@/test/msw";
 import { AccountMenu } from "./account-menu";
-
-const push = vi.fn();
-const refresh = vi.fn();
-
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ push, refresh }),
-}));
-
-/** Same-origin BFF route, absolute so MSW can match it under jsdom. */
-const LOGOUT_ROUTE = "http://localhost:3000/api/auth/logout";
 
 const USER: SessionUser = {
   id: "60375ba2-66aa-4d12-9f4b-09c659897447",
   email: "leitor@bookland.com",
+  name: "Ana Lúcia Prado",
   role: "CUSTOMER",
   isAdmin: false,
 };
 
-beforeEach(() => {
-  push.mockClear();
-  refresh.mockClear();
-});
+afterEach(() => vi.restoreAllMocks());
 
 async function openMenu() {
   const user = userEvent.setup();
@@ -36,9 +22,15 @@ async function openMenu() {
 }
 
 describe("AccountMenu", () => {
-  it("names the signed-in user with the handle from the token", () => {
-    // The access token carries no display name, so the local part stands in.
+  it("greets the signed-in user by first name", () => {
     render(<AccountMenu user={USER} />);
+
+    expect(screen.getByText("Ana")).toBeInTheDocument();
+  });
+
+  it("falls back to the e-mail handle for a token without a name", () => {
+    // Sessions that predate the `name` claim carry none until their next refresh.
+    render(<AccountMenu user={{ ...USER, name: null }} />);
 
     expect(screen.getByText("leitor")).toBeInTheDocument();
   });
@@ -50,12 +42,12 @@ describe("AccountMenu", () => {
 
     expect(await screen.findByRole("menuitem", { name: "Sair" })).toBeInTheDocument();
     expect(screen.getByText(USER.email)).toBeInTheDocument();
+    expect(screen.getByText(USER.name!)).toBeInTheDocument();
   });
 
   it("links to the order history, keeping menu semantics", async () => {
-    // Arrived with stage 6, once `/orders` existed. It stays a `menuitem` — the
-    // menu's keyboard handling depends on the role, so this is the one place
-    // where `render={<Link/>}` beats a styled anchor.
+    // It stays a `menuitem` — the menu's keyboard handling depends on the role,
+    // so this is the one place where `render={<Link/>}` beats a styled anchor.
     render(<AccountMenu user={USER} />);
 
     await openMenu();
@@ -64,32 +56,23 @@ describe("AccountMenu", () => {
     expect(orders).toHaveAttribute("href", "/orders");
   });
 
-  it("signs out through the BFF and refreshes the server-rendered header", async () => {
-    server.use(http.post(LOGOUT_ROUTE, () => new HttpResponse(null, { status: 204 })));
-    render(<AccountMenu user={USER} />);
+  it("signs out by submitting a POST form, not with fetch", async () => {
+    // The BFF answers with a redirect to the identity service, another origin:
+    // only a real navigation can follow it (docs/specs/21, R3).
+    const submit = vi
+      .spyOn(HTMLFormElement.prototype, "requestSubmit")
+      .mockImplementation(() => {});
+    const fetchSpy = vi.spyOn(globalThis, "fetch");
+    const { container } = render(<AccountMenu user={USER} />);
 
     const user = await openMenu();
     await user.click(await screen.findByRole("menuitem", { name: "Sair" }));
 
-    await waitFor(() => expect(push).toHaveBeenCalledWith("/"));
-    // The header is rendered from the cookie on the server: without the refresh
-    // the Router Cache keeps serving the signed-in version.
-    expect(refresh).toHaveBeenCalled();
-  });
+    expect(submit).toHaveBeenCalledTimes(1);
+    expect(fetchSpy).not.toHaveBeenCalled();
 
-  it("says so when the sign-out fails, instead of pretending it worked", async () => {
-    // The cookies may already be gone, but claiming "signed out" while the
-    // refresh token still lives upstream would be a lie about the session.
-    server.use(
-      http.post(LOGOUT_ROUTE, () =>
-        HttpResponse.json({ code: "INTERNAL_ERROR", message: "boom" }, { status: 500 }),
-      ),
-    );
-    render(<AccountMenu user={USER} />);
-
-    const user = await openMenu();
-    await user.click(await screen.findByRole("menuitem", { name: "Sair" }));
-
-    await waitFor(() => expect(push).not.toHaveBeenCalled());
+    const form = container.querySelector("form");
+    expect(form).toHaveAttribute("method", "post");
+    expect(form).toHaveAttribute("action", "/api/auth/logout");
   });
 });

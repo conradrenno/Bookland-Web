@@ -10,11 +10,14 @@ import { CartLine } from "./cart-line";
 
 const refresh = vi.fn();
 const push = vi.fn();
+const navigateTo = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push }),
   usePathname: () => "/cart",
 }));
+
+vi.mock("@/lib/navigation", () => ({ navigateTo: (href: string) => navigateTo(href) }));
 
 const BOOK_ID = "92d3c8cb-443a-4501-a593-017bdc843196";
 /** Same-origin route, so MSW needs an absolute URL to match it in jsdom. */
@@ -146,7 +149,7 @@ describe("CartLine", () => {
     await userEvent.click(screen.getByRole("button", { name: /Aumentar quantidade/ }));
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/login?next=${encodeURIComponent("/cart")}`),
+      expect(navigateTo).toHaveBeenCalledWith(`/api/auth/login?next=${encodeURIComponent("/cart")}`),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });

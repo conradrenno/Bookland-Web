@@ -8,6 +8,7 @@ import { useState } from "react";
 import { ON_SURFACE_GHOST } from "@/components/layout/on-surface";
 import { Button } from "@/components/ui/button";
 import type { CategoryViewModel } from "@/lib/api/types";
+import { loginHref } from "@/lib/auth/next-path";
 
 interface MobileNavProps {
   categories: CategoryViewModel[];
@@ -77,7 +78,9 @@ export function MobileNav({ categories, signedIn }: MobileNavProps) {
             {!signedIn && (
               <>
                 <hr className="my-3 border-border" />
-                <MobileLink href="/login">Entrar</MobileLink>
+                <MobileLink href={loginHref()} external>
+                  Entrar
+                </MobileLink>
                 <MobileLink href="/register">Criar conta</MobileLink>
               </>
             )}
@@ -88,9 +91,29 @@ export function MobileNav({ categories, signedIn }: MobileNavProps) {
   );
 }
 
-function MobileLink({ href, children }: { href: string; children: React.ReactNode }) {
+/**
+ * `external` renders a plain anchor: the login route redirects to the identity
+ * service, which a client-side `<Link>` navigation cannot follow.
+ */
+function MobileLink({
+  href,
+  external = false,
+  children,
+}: {
+  href: string;
+  external?: boolean;
+  children: React.ReactNode;
+}) {
+  const className = "rounded-md px-2 py-2 text-sm hover:bg-muted";
+  if (external) {
+    return (
+      <a href={href} className={className}>
+        {children}
+      </a>
+    );
+  }
   return (
-    <Link href={href} className="rounded-md px-2 py-2 text-sm hover:bg-muted">
+    <Link href={href} className={className}>
       {children}
     </Link>
   );

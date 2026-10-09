@@ -13,14 +13,15 @@ function apply(body: unknown) {
 }
 
 describe("applyApiError", () => {
-  it("puts wrong credentials in the banner without blaming a field", () => {
-    // Saying *which* of the two was wrong would let an attacker enumerate accounts.
+  it("puts a business error in the banner without blaming a field", () => {
     const { banner, setFieldError } = apply({
-      code: ErrorCodes.INVALID_CREDENTIALS,
-      message: "Bad credentials",
+      code: ErrorCodes.CHECKOUT_IN_PROGRESS,
+      message: "A checkout is already running",
     });
 
-    expect(banner).toBe("E-mail ou senha incorretos.");
+    expect(banner).toBe(
+      "Você já tem um pedido sendo processado. Aguarde a confirmação antes de fazer outro.",
+    );
     expect(setFieldError).not.toHaveBeenCalled();
   });
 

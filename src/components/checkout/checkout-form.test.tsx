@@ -9,11 +9,14 @@ import { CheckoutForm } from "./checkout-form";
 
 const refresh = vi.fn();
 const push = vi.fn();
+const navigateTo = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push }),
   usePathname: () => "/checkout",
 }));
+
+vi.mock("@/lib/navigation", () => ({ navigateTo: (href: string) => navigateTo(href) }));
 
 /** Same-origin route, so MSW needs an absolute URL to match it in jsdom. */
 const CHECKOUT_ROUTE = "http://localhost:3000/api/cart/checkout";
@@ -178,7 +181,7 @@ describe("CheckoutForm", () => {
     await user.click(submit());
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/login?next=${encodeURIComponent("/checkout")}`),
+      expect(navigateTo).toHaveBeenCalledWith(`/api/auth/login?next=${encodeURIComponent("/checkout")}`),
     );
   });
 

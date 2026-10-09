@@ -1,15 +1,21 @@
 /**
  * Contract smoke tests — the only suite that talks to a real Spring.
  *
- * Opt-in via `pnpm test:smoke` with the backend up on :8080; excluded from
- * `pnpm test` so a stopped backend never reddens the unit suite. Purpose is to
- * catch the API drifting away from what docs/specs/09-contract-notes.md records,
- * which unit tests against MSW stubs cannot see.
+ * Opt-in via `pnpm test:smoke` with the backend up — gateway on :8080, identity
+ * on :9000; excluded from `pnpm test` so a stopped backend never reddens the
+ * unit suite. Purpose is to catch the API drifting away from what the specs
+ * record, which unit tests against MSW stubs cannot see.
  *
- * Uses the dev-profile admin seed (see application.yml `bookland.admin.*`).
+ * Signs up its own customers on every run and signs in through the real OAuth2
+ * flow (`src/test/live-login.ts`), so it depends on no seeded account and works
+ * against the dev profile and the compose stack alike. It needs
+ * `BOOKLAND_OAUTH_CLIENT_SECRET` — the smoke config loads `.env.local`.
  */
 import { beforeAll, beforeEach, describe, expect, it } from "vitest";
 
+import { IDENTITY_BASE_URL } from "@/lib/config";
+import { refreshTokens, revokeRefreshToken } from "@/lib/auth/oauth";
+import { freshCustomer, signInLive } from "@/test/live-login";
 import { getBook, searchBooks } from "./books";
 import { addCartItem, cartItemCount, getCart, removeCartItem, updateCartItem } from "./cart";
 import { listCategories, listCategoryBooks } from "./categories";
@@ -23,31 +29,15 @@ import type {
   OrderSummaryViewModel,
   OrderViewModel,
   PageResult,
-  TokenViewModel,
 } from "./types";
 
 /** An id of the right shape that nothing is seeded with. */
 const ABSENT_ID = "00000000-0000-0000-0000-000000000000";
 
-const ADMIN = { email: "admin@bookland.com", password: "admin1234" };
-
-/**
- * The other seeded account (backend README). The checkout tests run as this one
- * because buying is a customer's journey, and the admin only ever reaches routes
- * the storefront never touches.
- */
-const CUSTOMER = { email: "joao@bookland.com", password: "joao1234" };
-
-async function signInAs(credentials: { email: string; password: string }): Promise<string> {
-  const token = await apiFetch<TokenViewModel>("/api/v1/auth/login", {
-    method: "POST",
-    body: credentials,
-  });
-  return token.accessToken;
-}
-
-function signIn(): Promise<string> {
-  return signInAs(ADMIN);
+/** Signs up a new customer and signs them in; returns the access token. */
+async function signInAsNew(label: string): Promise<string> {
+  const tokens = await signInLive(await freshCustomer(label));
+  return tokens.access_token;
 }
 
 /**
@@ -93,6 +83,7 @@ describe("live API smoke", () => {
     const error = await apiFetch("/api/v1/auth/register", {
       method: "POST",
       body: { name: "", email: "nope", password: "a" },
+      baseUrl: IDENTITY_BASE_URL,
     }).catch((e: unknown) => e);
 
     expect(isApiError(error) && error.code).toBe(ErrorCodes.VALIDATION_ERROR);
@@ -100,31 +91,46 @@ describe("live API smoke", () => {
     expect(isApiError(error) && error.isFieldScoped).toBe(true);
   });
 
-  it("login + authenticated GET + 204 logout", async () => {
-    const token = await apiFetch<TokenViewModel>("/api/v1/auth/login", {
-      method: "POST",
-      body: { email: "admin@bookland.com", password: "admin1234" },
-    });
-    expect(token.accessToken).toBeTruthy();
+  it("code flow + authenticated GET through the gateway", async () => {
+    const tokens = await signInLive(await freshCustomer("flow"));
+    expect(tokens.token_type).toBe("Bearer");
+    expect(tokens.id_token).toBeTruthy();
+    // 15 minutes, give or take the second the server rounds off.
+    expect(tokens.expires_in).toBeGreaterThan(14 * 60);
 
     const cart = await apiFetch<{ customerId: string }>("/api/v1/cart", {
-      accessToken: token.accessToken,
+      accessToken: tokens.access_token,
     });
     expect(cart.customerId).toBeTruthy();
-
-    const logout = await apiFetch<void>("/api/v1/auth/logout", {
-      method: "POST",
-      body: { refreshToken: token.refreshToken },
-    });
-    expect(logout).toBeUndefined();
   });
 
-  it("an invalid token is a refreshable session problem, not a permission one", async () => {
-    const error = await apiFetch("/api/v1/admin/orders", {
+  it("a refresh rotates the token, and the spent one is refused", async () => {
+    const tokens = await signInLive(await freshCustomer("refresh"));
+
+    const renewed = await refreshTokens(tokens.refresh_token);
+    expect(renewed.refresh_token).not.toBe(tokens.refresh_token);
+    // The reissued id_token is what logout names the session with.
+    expect(renewed.id_token).toBeTruthy();
+
+    const replay = await refreshTokens(tokens.refresh_token).catch((e: unknown) => e);
+    expect(isApiError(replay) && replay.code).toBe(ErrorCodes.SESSION_ENDED);
+  });
+
+  it("a revoked refresh token is refused, which logout relies on", async () => {
+    const tokens = await signInLive(await freshCustomer("revoke"));
+
+    await revokeRefreshToken(tokens.refresh_token);
+
+    const after = await refreshTokens(tokens.refresh_token).catch((e: unknown) => e);
+    expect(isApiError(after) && after.code).toBe(ErrorCodes.SESSION_ENDED);
+  });
+
+  it("an invalid token ends the session rather than asking for a refresh", async () => {
+    const error = await apiFetch("/api/v1/cart", {
       accessToken: "garbage.token.here",
     }).catch((e: unknown) => e);
     expect(isApiError(error) && error.code).toBe(ErrorCodes.TOKEN_INVALID);
-    expect(isApiError(error) && error.shouldAttemptRefresh).toBe(true);
+    expect(isApiError(error) && error.shouldAttemptRefresh).toBe(false);
   });
 });
 
@@ -226,7 +232,7 @@ describe("live cart smoke", () => {
   let book: BookViewModel;
 
   beforeAll(async () => {
-    token = await signIn();
+    token = await signInAsNew("cart");
     // Needs stock to exercise the quantity rules; the seed has no sold-out book.
     const { content } = await searchBooks({ size: 20 });
     book = content.find((candidate) => candidate.stockQuantity > 2)!;
@@ -347,7 +353,7 @@ describe("live checkout smoke", () => {
   let book: BookViewModel;
 
   beforeAll(async () => {
-    token = await signInAs(CUSTOMER);
+    token = await signInAsNew("checkout");
     const { content } = await searchBooks({ size: 20 });
     book = content.find((candidate) => candidate.stockQuantity > 2)!;
     expect(book).toBeDefined();
@@ -470,7 +476,7 @@ describe("live orders smoke", () => {
   let book: BookViewModel;
 
   beforeAll(async () => {
-    token = await signInAs(CUSTOMER);
+    token = await signInAsNew("orders");
     const { content } = await searchBooks({ size: 20 });
     book = content.find((candidate) => candidate.stockQuantity > 5)!;
     expect(book).toBeDefined();
@@ -486,15 +492,9 @@ describe("live orders smoke", () => {
     return checkout(as, "PIX");
   }
 
-  /**
-   * An order belonging to the admin, for the isolation tests.
-   *
-   * Buys one rather than reading whatever is there: H2 is in-memory, so a fresh
-   * backend has no admin orders at all and the assertion would be skipped
-   * silently instead of failing loudly.
-   */
+  /** An order belonging to another customer, for the isolation tests. */
   async function foreignOrder(): Promise<{ adminToken: string; order: OrderViewModel }> {
-    const adminToken = await signIn();
+    const adminToken = await signInAsNew("stranger");
     return { adminToken, order: await buyOne(adminToken) };
   }
 

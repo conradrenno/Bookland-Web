@@ -12,6 +12,7 @@ import { getOrder } from "@/lib/api/orders";
 import { getOrderPayment } from "@/lib/api/payments";
 import type { OrderViewModel, PaymentViewModel } from "@/lib/api/types";
 import { isUuid } from "@/lib/api/uuid";
+import { loginHref } from "@/lib/auth/next-path";
 import { getAccessToken } from "@/lib/auth/server";
 import { formatDate, formatPrice } from "@/lib/format";
 import { isCancellable } from "@/lib/orders/status";
@@ -161,7 +162,7 @@ async function readOrder(orderId: string): Promise<OrderOutcome> {
 }
 
 function signInPath(orderId: string): string {
-  return `/login?next=${encodeURIComponent(`/orders/${orderId}`)}`;
+  return loginHref(`/orders/${orderId}`);
 }
 
 /** `f8bbf26e-28bb-…` → `#f8bbf26e`, which is what fits in a heading and a chat message. */

@@ -15,12 +15,11 @@ export const GENERIC_ERROR_MESSAGE = "Estamos com um problema. Tente novamente."
 
 const MESSAGES: Partial<Record<string, string>> = {
   // Authentication
-  [ErrorCodes.INVALID_CREDENTIALS]: "E-mail ou senha incorretos.",
   [ErrorCodes.EMAIL_ALREADY_EXISTS]: "Este e-mail já está cadastrado.",
   [ErrorCodes.TOKEN_MISSING]: "Faça login para continuar.",
   [ErrorCodes.TOKEN_INVALID]: "Sua sessão expirou. Faça login novamente.",
   [ErrorCodes.TOKEN_EXPIRED]: "Sua sessão expirou. Faça login novamente.",
-  [ErrorCodes.INVALID_REFRESH_TOKEN]: "Sua sessão expirou. Faça login novamente.",
+  [ErrorCodes.SESSION_ENDED]: "Sua sessão expirou. Faça login novamente.",
   [ErrorCodes.INSUFFICIENT_ROLE]: "Você não tem acesso a este recurso.",
 
   // Cart. `CART_ITEM_UNAVAILABLE` covers both "sold out" and "we have fewer

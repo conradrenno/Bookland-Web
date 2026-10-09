@@ -3,6 +3,7 @@ import Link from "next/link";
 
 import { ON_SURFACE_GHOST } from "@/components/layout/on-surface";
 import { buttonVariants } from "@/components/ui/button";
+import { loginHref } from "@/lib/auth/next-path";
 import { cn } from "@/lib/utils";
 
 /** Above this the badge would outgrow the icon; nobody needs the exact number there. */
@@ -27,21 +28,29 @@ interface CartButtonProps {
  */
 export function CartButton({ count, signedIn }: CartButtonProps) {
   const showBadge = signedIn && count > 0;
+  const label = showBadge ? `Carrinho, ${describeItems(count)}` : "Carrinho";
+  const className = cn(
+    buttonVariants({ variant: "ghost", size: "icon" }),
+    "relative",
+    ON_SURFACE_GHOST,
+  );
+
+  // A styled link, not a `Button` rendering one: this element navigates, so a
+  // screen reader has to hear "link". Same call as the card's CTA
+  // (docs/specs/18-cart.md) — `Button render={<Link/>}` either warns about a
+  // non-native button or stamps `role="button"` on the anchor.
+  if (!signedIn) {
+    // A plain anchor: the login route redirects to the identity service, which
+    // a client-side `<Link>` navigation cannot follow.
+    return (
+      <a href={loginHref("/cart")} aria-label={label} className={className}>
+        <ShoppingBag aria-hidden />
+      </a>
+    );
+  }
 
   return (
-    // A styled `Link`, not a `Button` rendering one: this element navigates, so
-    // a screen reader has to hear "link". Same call as the card's CTA
-    // (docs/specs/18-cart.md) — `Button render={<Link/>}` either warns about a
-    // non-native button or stamps `role="button"` on the anchor.
-    <Link
-      href={signedIn ? "/cart" : "/login?next=%2Fcart"}
-      aria-label={showBadge ? `Carrinho, ${describeItems(count)}` : "Carrinho"}
-      className={cn(
-        buttonVariants({ variant: "ghost", size: "icon" }),
-        "relative",
-        ON_SURFACE_GHOST,
-      )}
-    >
+    <Link href="/cart" aria-label={label} className={className}>
       <ShoppingBag aria-hidden />
       {showBadge && (
         // Gold, not terracotta: `primary` and the wood surface sit at nearly the

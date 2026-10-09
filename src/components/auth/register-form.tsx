@@ -1,7 +1,6 @@
 "use client";
 
 import { zodResolver } from "@hookform/resolvers/zod";
-import { useRouter } from "next/navigation";
 import { useState } from "react";
 import { useForm } from "react-hook-form";
 import { z } from "zod";
@@ -10,6 +9,8 @@ import { FormAlert } from "@/components/form/form-alert";
 import { TextField } from "@/components/form/text-field";
 import { Button } from "@/components/ui/button";
 import { signUp } from "@/lib/api/auth-client";
+import { loginHref } from "@/lib/auth/next-path";
+import { navigateTo } from "@/lib/navigation";
 import { applyApiError } from "@/lib/forms/apply-api-error";
 
 /** One message for all three password constraints: the user needs the rule, not a diagnosis. */
@@ -49,7 +50,6 @@ type RegisterValues = z.infer<typeof registerSchema>;
 const FIELDS = ["name", "email", "password"] as const;
 
 export function RegisterForm({ next }: { next: string }) {
-  const router = useRouter();
   const [alert, setAlert] = useState<string | null>(null);
 
   const {
@@ -65,12 +65,13 @@ export function RegisterForm({ next }: { next: string }) {
   async function onSubmit({ name, email, password }: RegisterValues) {
     setAlert(null);
 
-    // Upstream answers 201 with a token pair, so registering also signs in —
-    // there is no second step (docs/specs/02-auth.md).
+    // The identity service issues no token on registration, so the new account
+    // goes through the normal login next — and types the password once more,
+    // on the identity service's page (docs/specs/21, decision 3). A full
+    // navigation, not `router.push`: the login ends on another origin.
     const result = await signUp({ name, email, password });
     if (result.ok) {
-      router.replace(next);
-      router.refresh();
+      navigateTo(loginHref(next));
       return;
     }
 

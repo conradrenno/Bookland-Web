@@ -14,9 +14,9 @@ function base64Url(value: string): string {
   return btoa(binary).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
 }
 
-/** Builds an unsigned JWT shaped like the ones Bookland issues (HS384). */
+/** Builds an unsigned JWT shaped like the ones the identity service issues (RS256). */
 function tokenWith(claims: Record<string, unknown>): string {
-  return [base64Url(JSON.stringify({ alg: "HS384" })), base64Url(JSON.stringify(claims)), "sig"].join(
+  return [base64Url(JSON.stringify({ alg: "RS256" })), base64Url(JSON.stringify(claims)), "sig"].join(
     ".",
   );
 }
@@ -25,6 +25,7 @@ const VALID_CLAIMS: AccessTokenClaims = {
   sub: "16582a57-2fdd-42d9-950c-70dc54e8c100",
   email: "customer@example.com",
   role: "CUSTOMER",
+  name: "Ana Lúcia",
   iat: 1_785_178_113,
   exp: 1_785_264_513,
 };
@@ -96,9 +97,20 @@ describe("toSessionUser", () => {
     expect(toSessionUser(VALID_CLAIMS)).toEqual({
       id: VALID_CLAIMS.sub,
       email: VALID_CLAIMS.email,
+      name: "Ana Lúcia",
       role: "CUSTOMER",
       isAdmin: false,
     });
+  });
+
+  it("decodes a name with accents as UTF-8", () => {
+    expect(decodeAccessToken(tokenWith({ ...VALID_CLAIMS }))?.name).toBe("Ana Lúcia");
+  });
+
+  it("has no name when the token carries none, or a blank one", () => {
+    // Sessions that predate the claim lack it until their next refresh.
+    expect(toSessionUser({ ...VALID_CLAIMS, name: undefined })?.name).toBeNull();
+    expect(toSessionUser({ ...VALID_CLAIMS, name: "  " })?.name).toBeNull();
   });
 
   it("flags an admin", () => {

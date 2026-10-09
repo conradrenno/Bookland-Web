@@ -17,14 +17,6 @@ export const ErrorCodes = {
   TOKEN_INVALID: "TOKEN_INVALID",
   /** Token well-formed but past `exp` — the one code that is worth a refresh. */
   TOKEN_EXPIRED: "TOKEN_EXPIRED",
-  /**
-   * @deprecated Produced by the home-grown login, which no longer exists — a
-   * wrong password is now answered by the identity service's own login page.
-   * Removed in stage 3 of docs/specs/21.
-   */
-  INVALID_CREDENTIALS: "INVALID_CREDENTIALS",
-  /** @deprecated Same as `INVALID_CREDENTIALS`; a dead refresh token is now OAuth2's `invalid_grant`. */
-  INVALID_REFRESH_TOKEN: "INVALID_REFRESH_TOKEN",
 
   // --- auth: permission (403) ----------------------------------------------
   /** Authenticated, but the role does not cover this route. */
@@ -148,6 +140,18 @@ export const ErrorCodes = {
   INVALID_RESPONSE: "INVALID_RESPONSE",
   /** Fallback when the failure carries no usable code. */
   UNKNOWN: "UNKNOWN",
+  /**
+   * The Authorization Server refused the refresh token (`invalid_grant`): spent,
+   * revoked, expired, or the account is gone. The session is over — log in again.
+   * OAuth2 errors are not problem+json, so the BFF names this one itself.
+   */
+  SESSION_ENDED: "SESSION_ENDED",
+  /**
+   * The Authorization Server refused **the BFF itself** (`invalid_client`, or any
+   * other OAuth2 error): a wrong client secret or redirect URI. A deployment bug,
+   * never the user's — surfaced as a 500.
+   */
+  OAUTH_REJECTED: "OAUTH_REJECTED",
 } as const;
 
 export type KnownErrorCode = (typeof ErrorCodes)[keyof typeof ErrorCodes];

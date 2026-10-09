@@ -9,6 +9,15 @@ import { fileURLToPath } from "node:url";
  * concatenates arrays, so the base `exclude` of `*.smoke.test.ts` would survive
  * and silently filter out the very files this config exists to run.
  */
+// The OAuth2 client secret (and any URL overrides) from `.env.local`, as
+// `next dev` would read them. Workers inherit this process's environment.
+// Absent file is fine: the variables may come from the shell instead.
+try {
+  process.loadEnvFile(".env.local");
+} catch {
+  // no .env.local
+}
+
 export default defineConfig({
   resolve: {
     alias: {
@@ -19,7 +28,7 @@ export default defineConfig({
     environment: "node",
     include: ["src/**/*.smoke.test.ts"],
     exclude: ["**/node_modules/**"],
-    // One upstream at a time: these tests log in and out of a shared account.
+    // One upstream at a time: these tests share a running backend.
     fileParallelism: false,
   },
 });

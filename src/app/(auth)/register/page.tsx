@@ -1,10 +1,9 @@
 import type { Metadata } from "next";
-import Link from "next/link";
 import { redirect } from "next/navigation";
 
 import { AuthCard } from "@/components/auth/auth-card";
 import { RegisterForm } from "@/components/auth/register-form";
-import { resolveAfterAuthPath, withNextParam } from "@/lib/auth/next-path";
+import { loginHref, resolveAfterAuthPath } from "@/lib/auth/next-path";
 import { getCurrentUser } from "@/lib/auth/server";
 
 export const metadata: Metadata = {
@@ -27,12 +26,14 @@ export default async function RegisterPage({ searchParams }: { searchParams: Sea
       footer={
         <>
           Já tem conta?{" "}
-          <Link
-            href={withNextParam("/login", destination)}
+          {/* A plain anchor: the login route redirects to the identity service,
+              which a client-side `<Link>` navigation cannot follow. */}
+          <a
+            href={loginHref(destination)}
             className="font-medium text-primary underline-offset-4 hover:underline"
           >
             Entrar
-          </Link>
+          </a>
         </>
       }
     >

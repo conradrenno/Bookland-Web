@@ -69,36 +69,11 @@ export interface OAuthTokenResponse {
   scope: string;
 }
 
-/** @deprecated The home-grown JWT login is gone upstream; removed in stage 3 of docs/specs/21. */
-export interface TokenViewModel {
-  accessToken: string;
-  tokenType: string;
-  accessTokenExpiresAt: ISODateTime;
-  refreshToken: string;
-  refreshTokenExpiresAt: ISODateTime;
-}
-
 export interface RegisterRequest {
   name: string;
   email: string;
   /** Min 8 chars, at least one digit (contract pattern `.*\d.*`). */
   password: string;
-}
-
-/** @deprecated See `TokenViewModel`. */
-export interface LoginRequest {
-  email: string;
-  password: string;
-}
-
-/** @deprecated See `TokenViewModel`. */
-export interface RefreshTokenRequest {
-  refreshToken: string;
-}
-
-/** @deprecated See `TokenViewModel`. */
-export interface LogoutRequest {
-  refreshToken: string;
 }
 
 export interface UpdateUserRequest {

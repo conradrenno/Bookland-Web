@@ -1,51 +1,91 @@
 /**
- * Token renewal, serialised so concurrent callers never race.
+ * Token renewal, made safe for a refresh token that only works once.
  *
- * Why serialising matters here specifically: the upstream **rotates** the
- * refresh token — renewing invalidates the one you sent. Two calls renewing in
- * parallel means the second presents a token the first already consumed, gets
- * `INVALID_REFRESH_TOKEN`, and drops a session whose user did nothing wrong.
+ * The Authorization Server **rotates** the refresh token: renewing invalidates
+ * the one sent. With access tokens living 15 minutes, a page whose access token
+ * just expired fires several requests at once — the document, prefetches, BFF
+ * calls — all carrying the same refresh cookie. Renewing for each would spend
+ * that token on the first and hand every other request `invalid_grant`, logging
+ * out a user who did nothing wrong (docs/specs/21, R5).
  *
- * The fix is a single in-flight promise: the first caller performs the renewal,
- * everyone else awaits that same result.
+ * Two layers stop that:
  *
- * ⚠️ **Scope of the guarantee: one process.** Next may run middleware (Edge) and
- * route handlers (Node) in separate runtimes, and a multi-instance deployment
- * multiplies that. This removes the common in-process race, not a distributed
- * one — which would need a shared lock. Acceptable for a single-node BFF;
- * revisit if we ever scale out (docs/specs/02-auth.md).
+ * 1. **In flight** — concurrent callers with the same token share one upstream
+ *    call.
+ * 2. **Recently renewed** — for a short while after it settles, a caller still
+ *    presenting the token just spent gets the same result. That is the request
+ *    the browser sent *before* the `Set-Cookie` with the new token reached it.
+ *
+ * ⚠️ **Scope of the guarantee: one process.** Fine for a single-node BFF; a
+ * multi-instance deployment would need the memo in a shared store.
  */
 
-import type { TokenViewModel } from "@/lib/api/types";
-import { refresh as refreshUpstream } from "@/lib/api/auth";
-
-/** The renewal currently in flight, if any. Module-scoped on purpose. */
-let inFlight: Promise<TokenViewModel> | null = null;
+import type { OAuthTokenResponse } from "@/lib/api/types";
+import { refreshTokens } from "./oauth";
 
 /**
- * Renews the pair, collapsing concurrent attempts into one upstream call.
+ * How long a spent refresh token keeps answering with its successor.
  *
- * Throws `ApiError` when renewal fails — typically 401 `INVALID_REFRESH_TOKEN`,
- * which the caller should treat as "session over" and clear the cookies.
- *
- * Note it does **not** touch cookies itself: writing them is only legal in some
- * Next contexts, so persisting the result is the caller's job.
+ * Long enough to cover a page's burst of requests and a slow network; short
+ * enough that a stolen, already-rotated token is useless soon after. Beyond it
+ * the token is just as dead upstream as it always was.
  */
-export function renewTokens(refreshToken: string): Promise<TokenViewModel> {
-  // A renewal already running was started with the same cookie value we would
-  // send, so its result is exactly what this caller needs.
-  if (inFlight) return inFlight;
+export const RECENT_RENEWAL_TTL_MS = 30_000;
 
-  inFlight = refreshUpstream({ refreshToken }).finally(() => {
-    // Cleared on success *and* failure: a failed attempt must not pin every
-    // later caller to the same rejection for the rest of the process's life.
-    inFlight = null;
-  });
-
-  return inFlight;
+interface Renewal {
+  result: Promise<OAuthTokenResponse>;
+  /** Set once the renewal succeeds; until then the entry counts as in flight. */
+  settledAt?: number;
 }
 
-/** Test seam: drops any in-flight renewal so suites do not leak state. */
+/** Keyed by the refresh token that was spent. Module-scoped on purpose. */
+const renewals = new Map<string, Renewal>();
+
+function forgetStale(now: number): void {
+  for (const [token, renewal] of renewals) {
+    if (renewal.settledAt !== undefined && now - renewal.settledAt > RECENT_RENEWAL_TTL_MS) {
+      renewals.delete(token);
+    }
+  }
+}
+
+/**
+ * Renews the session, collapsing every caller holding the same refresh token
+ * into one upstream call.
+ *
+ * Throws `ApiError` when renewal fails — `SESSION_ENDED` for a refused token,
+ * which the caller should treat as "log in again" and clear the cookies. A
+ * failure is never remembered: the next caller gets a fresh attempt.
+ *
+ * It does **not** touch cookies: writing them is only legal in some Next
+ * contexts, so persisting the result is the caller's job.
+ */
+export function renewTokens(
+  refreshToken: string,
+  now: () => number = Date.now,
+): Promise<OAuthTokenResponse> {
+  forgetStale(now());
+
+  const existing = renewals.get(refreshToken);
+  if (existing) return existing.result;
+
+  const renewal: Renewal = {
+    result: refreshTokens(refreshToken).then(
+      (tokens) => {
+        renewal.settledAt = now();
+        return tokens;
+      },
+      (error: unknown) => {
+        renewals.delete(refreshToken);
+        throw error;
+      },
+    ),
+  };
+  renewals.set(refreshToken, renewal);
+  return renewal.result;
+}
+
+/** Test seam: drops every remembered renewal so suites do not leak state. */
 export function resetRenewalState(): void {
-  inFlight = null;
+  renewals.clear();
 }

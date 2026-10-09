@@ -49,7 +49,7 @@ describe("CartButton", () => {
     renderButton({ count: 5, signedIn: false });
 
     const link = screen.getByRole("link", { name: "Carrinho" });
-    expect(link).toHaveAttribute("href", "/login?next=%2Fcart");
+    expect(link).toHaveAttribute("href", "/api/auth/login?next=%2Fcart");
     expect(screen.queryByText("5")).not.toBeInTheDocument();
   });
 });

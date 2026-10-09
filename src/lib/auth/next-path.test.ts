@@ -1,6 +1,6 @@
 import { describe, expect, it } from "vitest";
 
-import { resolveAfterAuthPath, safeNextPath, withNextParam } from "./next-path";
+import { loginHref, resolveAfterAuthPath, safeNextPath, withNextParam } from "./next-path";
 
 describe("safeNextPath", () => {
   it("keeps a same-site path, query and hash included", () => {
@@ -67,5 +67,15 @@ describe("withNextParam", () => {
 
   it("leaves the link clean when the destination is just the home page", () => {
     expect(withNextParam("/register", "/")).toBe("/register");
+  });
+});
+
+describe("loginHref", () => {
+  it("starts the OAuth2 login, carrying the destination", () => {
+    expect(loginHref("/cart")).toBe("/api/auth/login?next=%2Fcart");
+  });
+
+  it("leaves the link clean for the home page", () => {
+    expect(loginHref()).toBe("/api/auth/login");
   });
 });

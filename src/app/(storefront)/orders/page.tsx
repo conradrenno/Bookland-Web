@@ -4,13 +4,14 @@ import { redirect } from "next/navigation";
 import { EmptyOrders } from "@/components/orders/empty-orders";
 import { OrderSummaryCard } from "@/components/orders/order-summary-card";
 import { Pagination } from "@/components/ui/pagination";
+import { loginHref } from "@/lib/auth/next-path";
 import { isApiError } from "@/lib/api/errors";
 import { listOrders, parseOrderSearchParams } from "@/lib/api/orders";
 import type { OrderSummaryViewModel, PageResult } from "@/lib/api/types";
 import { getAccessToken } from "@/lib/auth/server";
 
 /** Where an unusable session is sent — same shape as the cart's. */
-const SIGN_IN_PATH = "/login?next=%2Forders";
+const SIGN_IN_PATH = loginHref("/orders");
 
 interface OrdersPageProps {
   /** Only `page` and `size` are read; anything else is ignored. */

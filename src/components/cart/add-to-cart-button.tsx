@@ -1,13 +1,13 @@
 "use client";
 
 import { Check, LoaderCircle, ShoppingBag } from "lucide-react";
-import Link from "next/link";
 import { usePathname, useRouter } from "next/navigation";
 import { useEffect, useRef, useState } from "react";
 
 import { Button, buttonVariants } from "@/components/ui/button";
 import { addToCart } from "@/lib/api/cart-client";
-import { withNextParam } from "@/lib/auth/next-path";
+import { loginHref } from "@/lib/auth/next-path";
+import { navigateTo } from "@/lib/navigation";
 import { cn } from "@/lib/utils";
 
 /** How long the "added" confirmation stays before the button returns to normal. */
@@ -78,7 +78,7 @@ export function AddToCartButton({
 
     setStatus("idle");
     if (result.sessionExpired) {
-      router.push(withNextParam("/login", pathname));
+      navigateTo(loginHref(pathname));
       return;
     }
     setError(result.message);
@@ -93,18 +93,15 @@ export function AddToCartButton({
       ) : !signedIn ? (
         // Anonymous visitors go straight to sign-in rather than round-tripping
         // to a 401 first — same rule as the cart icon (docs/specs/13).
-        // A styled `Link`, not a `Button` rendering one. Passing `render={<Link/>}`
+        // A styled anchor, not a `Button` rendering one. Passing `render={<Link/>}`
         // makes Base UI either warn about a non-native button or stamp
         // `role="button"` on the anchor — and this element navigates, so "link"
         // is what a screen reader should hear. `buttonVariants` gives it the
         // look without the wrong semantics.
-        <Link
-          href={withNextParam("/login", pathname)}
-          className={cn(buttonVariants({ size }), "w-full")}
-        >
+        <a href={loginHref(pathname)} className={cn(buttonVariants({ size }), "w-full")}>
           <ShoppingBag aria-hidden />
           Adicionar ao carrinho
-        </Link>
+        </a>
       ) : (
         <Button
           size={size}

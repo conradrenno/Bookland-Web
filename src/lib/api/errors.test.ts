@@ -131,17 +131,10 @@ describe("refresh decision", () => {
     expect(error.isSessionProblem).toBe(true);
   });
 
-  it("does not refresh on bad login credentials", async () => {
-    // A failed login is a form error; refreshing there would burn the session
-    // of a user who is not even signed in.
-    const error = await errorFor(401, ErrorCodes.INVALID_CREDENTIALS, "/api/v1/auth/login");
+  it("does not refresh on TOKEN_MISSING — there is nothing to renew", async () => {
+    const error = await errorFor(401, ErrorCodes.TOKEN_MISSING, "/api/v1/cart");
     expect(error.shouldAttemptRefresh).toBe(false);
     expect(error.isSessionProblem).toBe(true);
-  });
-
-  it("does not refresh on a dead refresh token — that session is over", async () => {
-    const error = await errorFor(401, ErrorCodes.INVALID_REFRESH_TOKEN, "/api/v1/auth/refresh");
-    expect(error.shouldAttemptRefresh).toBe(false);
   });
 
   it("does not refresh on 403: the token is fine, the role is not", async () => {

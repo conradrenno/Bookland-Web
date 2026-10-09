@@ -9,11 +9,14 @@ import { AddToCartButton } from "./add-to-cart-button";
 
 const refresh = vi.fn();
 const push = vi.fn();
+const navigateTo = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push }),
   usePathname: () => "/books/92d3c8cb-443a-4501-a593-017bdc843196",
 }));
+
+vi.mock("@/lib/navigation", () => ({ navigateTo: (href: string) => navigateTo(href) }));
 
 /** Same-origin route, so MSW needs an absolute URL to match it in jsdom. */
 const ITEMS_ROUTE = "http://localhost:3000/api/cart/items";
@@ -101,7 +104,7 @@ describe("AddToCartButton", () => {
     await clickCta();
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(`/login?next=${encodeURIComponent(`/books/${BOOK_ID}`)}`),
+      expect(navigateTo).toHaveBeenCalledWith(`/api/auth/login?next=${encodeURIComponent(`/books/${BOOK_ID}`)}`),
     );
     expect(screen.queryByRole("alert")).not.toBeInTheDocument();
   });
@@ -157,7 +160,7 @@ describe("AddToCartButton", () => {
 
     expect(screen.getByRole("link", { name: /Adicionar ao carrinho/ })).toHaveAttribute(
       "href",
-      `/login?next=${encodeURIComponent(`/books/${BOOK_ID}`)}`,
+      `/api/auth/login?next=${encodeURIComponent(`/books/${BOOK_ID}`)}`,
     );
   });
 

@@ -12,12 +12,21 @@
 
 import type { UserRole, UUID } from "@/lib/api/types";
 
-/** Claims the Bookland access token carries (verified against a live token). */
+/**
+ * Claims the Bookland access token carries, as issued by the identity service
+ * (`BooklandTokenCustomizer` upstream). It also carries `aud = bookland-api`,
+ * `iss` and `scope`, which the BFF has no use for.
+ */
 export interface AccessTokenClaims {
   /** The user id. Note: `sub`, not `userId`. */
   sub: UUID;
   email: string;
   role: UserRole;
+  /**
+   * Display name. Optional: the server leaves it out for a session that started
+   * before it carried the name, until that session's next refresh.
+   */
+  name?: string;
   /** Issued-at, seconds since epoch. */
   iat: number;
   /** Expiry, seconds since epoch. */
@@ -28,6 +37,8 @@ export interface AccessTokenClaims {
 export interface SessionUser {
   id: UUID;
   email: string;
+  /** Null when the token carries no name — fall back to the e-mail. */
+  name: string | null;
   role: UserRole;
   isAdmin: boolean;
 }
@@ -94,6 +105,7 @@ export function toSessionUser(claims: AccessTokenClaims | null): SessionUser | n
   return {
     id: claims.sub,
     email: claims.email,
+    name: typeof claims.name === "string" && claims.name.trim() !== "" ? claims.name : null,
     role: claims.role,
     isAdmin: claims.role === "ADMIN",
   };

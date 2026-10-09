@@ -19,6 +19,10 @@ const alias = { "@": fileURLToPath(new URL("./src", import.meta.url)) };
 // unit suite red.
 const exclude = ["**/node_modules/**", "**/*.smoke.test.ts"];
 
+// Fixed values instead of whatever `.env.local` holds, so a suite behaves the
+// same on every machine. `lib/config.ts` reads these at import time.
+const env = { BOOKLAND_OAUTH_CLIENT_SECRET: "test-secret" };
+
 export default defineConfig({
   test: {
     projects: [
@@ -31,6 +35,7 @@ export default defineConfig({
           // MSW server lifecycle, shared by every suite.
           setupFiles: ["src/test/msw.ts"],
           exclude,
+          env,
         },
       },
       {
@@ -43,6 +48,7 @@ export default defineConfig({
           // they are stubbed exactly like the server-side callers are.
           setupFiles: ["src/test/msw.ts", "src/test/dom.ts"],
           exclude,
+          env,
         },
       },
     ],

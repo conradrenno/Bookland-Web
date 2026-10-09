@@ -115,7 +115,7 @@ describe("BookCard", () => {
       const cta = screen.getByRole("link", { name: /Adicionar ao carrinho/ });
       // usePathname is mocked to "/", the catalogue — and "/" is the default
       // landing, so `withNextParam` leaves the query off entirely.
-      expect(cta).toHaveAttribute("href", "/login");
+      expect(cta).toHaveAttribute("href", "/api/auth/login");
     });
 
     it("offers no purchase for a book that is out of stock", () => {

@@ -6,12 +6,9 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 import { server } from "@/test/msw";
 import { RegisterForm } from "./register-form";
 
-const replace = vi.fn();
-const refresh = vi.fn();
+const navigateTo = vi.fn();
 
-vi.mock("next/navigation", () => ({
-  useRouter: () => ({ replace, refresh }),
-}));
+vi.mock("@/lib/navigation", () => ({ navigateTo: (href: string) => navigateTo(href) }));
 
 const REGISTER_ROUTE = "http://localhost:3000/api/auth/register";
 
@@ -22,8 +19,7 @@ const VALID = {
 };
 
 beforeEach(() => {
-  replace.mockClear();
-  refresh.mockClear();
+  navigateTo.mockClear();
 });
 
 async function fill(overrides: Partial<typeof VALID & { confirmPassword: string }> = {}) {
@@ -43,15 +39,16 @@ function submit(user: ReturnType<typeof userEvent.setup>) {
 }
 
 describe("RegisterForm", () => {
-  it("signs the new user straight in and redirects", async () => {
-    // Upstream answers 201 with a token pair — there is no separate login step.
-    server.use(http.post(REGISTER_ROUTE, () => HttpResponse.json({ user: null }, { status: 201 })));
+  it("sends the new account through the login, keeping the destination", async () => {
+    // The identity service issues no token on registration (docs/specs/21).
+    server.use(http.post(REGISTER_ROUTE, () => new HttpResponse(null, { status: 201 })));
     render(<RegisterForm next="/checkout" />);
 
     await submit(await fill());
 
-    await waitFor(() => expect(replace).toHaveBeenCalledWith("/checkout"));
-    expect(refresh).toHaveBeenCalled();
+    await waitFor(() =>
+      expect(navigateTo).toHaveBeenCalledWith("/api/auth/login?next=%2Fcheckout"),
+    );
   });
 
   it("never sends confirmPassword, which is not in the contract", async () => {
@@ -59,14 +56,14 @@ describe("RegisterForm", () => {
     server.use(
       http.post(REGISTER_ROUTE, async ({ request }) => {
         body = await request.json();
-        return HttpResponse.json({ user: null }, { status: 201 });
+        return new HttpResponse(null, { status: 201 });
       }),
     );
     render(<RegisterForm next="/" />);
 
     await submit(await fill());
 
-    await waitFor(() => expect(replace).toHaveBeenCalled());
+    await waitFor(() => expect(navigateTo).toHaveBeenCalled());
     expect(body).toEqual(VALID);
   });
 
@@ -116,7 +113,7 @@ describe("RegisterForm", () => {
     await submit(await fill({ confirmPassword: "senha12345" }));
 
     expect(await screen.findByText("As senhas não coincidem.")).toBeInTheDocument();
-    expect(replace).not.toHaveBeenCalled();
+    expect(navigateTo).not.toHaveBeenCalled();
   });
 
   it("places server-side validation messages on the right fields", async () => {

@@ -17,7 +17,8 @@ import {
 } from "@/components/ui/alert-dialog";
 import { Button } from "@/components/ui/button";
 import { cancelOrder } from "@/lib/api/orders-client";
-import { withNextParam } from "@/lib/auth/next-path";
+import { loginHref } from "@/lib/auth/next-path";
+import { navigateTo } from "@/lib/navigation";
 import { formatPrice } from "@/lib/format";
 
 interface CancelOrderButtonProps {
@@ -66,7 +67,7 @@ export function CancelOrderButton({ orderId, totalAmount }: CancelOrderButtonPro
 
     setPending(false);
     if (result.sessionExpired) {
-      router.push(withNextParam("/login", pathname));
+      navigateTo(loginHref(pathname));
       return;
     }
     // Stays open — the message belongs next to the action it explains. The

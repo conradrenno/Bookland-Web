@@ -13,7 +13,8 @@ import { Button } from "@/components/ui/button";
 import { submitCheckout } from "@/lib/api/checkout-client";
 import { ErrorCodes } from "@/lib/api/error-codes";
 import { checkoutSchema, type CheckoutValues } from "@/lib/checkout/payment-schema";
-import { withNextParam } from "@/lib/auth/next-path";
+import { loginHref } from "@/lib/auth/next-path";
+import { navigateTo } from "@/lib/navigation";
 import { formatPrice } from "@/lib/format";
 
 /** Where a failure that only the cart can fix sends the customer. */
@@ -87,7 +88,7 @@ export function CheckoutForm({ total }: { total: number }) {
     sending.current = false;
 
     if (result.sessionExpired) {
-      router.push(withNextParam("/login", "/checkout"));
+      navigateTo(loginHref("/checkout"));
       return;
     }
 

@@ -89,9 +89,9 @@ export class ApiError extends Error {
   /**
    * Should the auth layer spend a refresh on this?
    *
-   * Only for token problems — a 401 from wrong login credentials or from a dead
-   * refresh token must *not* trigger one, or a failed login would burn the
-   * session. See 09-contract-notes.md item 12.
+   * Only for an expired access token. A missing one has nothing to renew, and
+   * the error contract says a corrupt one (`TOKEN_INVALID`) ends the session
+   * outright (docs/specs/21, R1).
    */
   get shouldAttemptRefresh(): boolean {
     return this.isSessionProblem && isRefreshableCode(this.code);

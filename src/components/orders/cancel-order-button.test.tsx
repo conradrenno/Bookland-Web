@@ -9,11 +9,14 @@ import { CancelOrderButton } from "./cancel-order-button";
 
 const refresh = vi.fn();
 const push = vi.fn();
+const navigateTo = vi.fn();
 
 vi.mock("next/navigation", () => ({
   useRouter: () => ({ refresh, push }),
   usePathname: () => "/orders/45bb517d-0ac5-4044-8bac-348572d09a03",
 }));
+
+vi.mock("@/lib/navigation", () => ({ navigateTo: (href: string) => navigateTo(href) }));
 
 const ORDER_ID = "45bb517d-0ac5-4044-8bac-348572d09a03";
 /** Same-origin route, so MSW needs an absolute URL to match it in jsdom. */
@@ -155,8 +158,8 @@ describe("CancelOrderButton", () => {
     await confirm();
 
     await waitFor(() =>
-      expect(push).toHaveBeenCalledWith(
-        `/login?next=${encodeURIComponent(`/orders/${ORDER_ID}`)}`,
+      expect(navigateTo).toHaveBeenCalledWith(
+        `/api/auth/login?next=${encodeURIComponent(`/orders/${ORDER_ID}`)}`,
       ),
     );
   });

@@ -61,3 +61,18 @@ export function withNextParam(path: string, next: string): string {
   if (next === DEFAULT_AFTER_AUTH) return path;
   return `${path}?next=${encodeURIComponent(next)}`;
 }
+
+/** The BFF route that starts the OAuth2 login (docs/specs/21). */
+export const LOGIN_START_PATH = "/api/auth/login";
+
+/**
+ * Where to send someone who has to sign in, carrying where they were going.
+ *
+ * ⚠️ **Navigate to it, never `router.push` it.** The route answers with a
+ * redirect to the identity service — another origin — which the App Router's
+ * client-side navigation cannot follow. Use an `<a href>` or
+ * `window.location.assign`.
+ */
+export function loginHref(next: string = DEFAULT_AFTER_AUTH): string {
+  return withNextParam(LOGIN_START_PATH, next);
+}

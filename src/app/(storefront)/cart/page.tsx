@@ -4,13 +4,14 @@ import { redirect } from "next/navigation";
 import { CartLine } from "@/components/cart/cart-line";
 import { CartSummary } from "@/components/cart/cart-summary";
 import { EmptyCart } from "@/components/cart/empty-cart";
+import { loginHref } from "@/lib/auth/next-path";
 import { cartItemCount } from "@/lib/api/cart";
 import { isApiError } from "@/lib/api/errors";
 import type { CartViewModel } from "@/lib/api/types";
 import { getCurrentCart } from "@/lib/cart/current-cart";
 
 /** Where an unusable session is sent — the same target the header's icon uses. */
-const SIGN_IN_PATH = "/login?next=%2Fcart";
+const SIGN_IN_PATH = loginHref("/cart");
 
 /** `?motivo=estoque` — set by the checkout when the upstream refuses on stock. */
 const OUT_OF_STOCK_REASON = "estoque";

@@ -4,12 +4,13 @@ import { redirect } from "next/navigation";
 import { EmptyCart } from "@/components/cart/empty-cart";
 import { CheckoutForm } from "@/components/checkout/checkout-form";
 import { OrderReview } from "@/components/checkout/order-review";
+import { loginHref } from "@/lib/auth/next-path";
 import { isApiError } from "@/lib/api/errors";
 import type { CartViewModel } from "@/lib/api/types";
 import { getCurrentCart } from "@/lib/cart/current-cart";
 
 /** Where an unusable session is sent. */
-const SIGN_IN_PATH = "/login?next=%2Fcheckout";
+const SIGN_IN_PATH = loginHref("/checkout");
 
 export const metadata: Metadata = {
   title: "Finalizar compra",

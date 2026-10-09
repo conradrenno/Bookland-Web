@@ -11,6 +11,7 @@ import { ON_SURFACE_GHOST, ON_SURFACE_PRIMARY } from "@/components/layout/on-sur
 import { Button } from "@/components/ui/button";
 import { listCategories } from "@/lib/api/categories";
 import type { CategoryViewModel } from "@/lib/api/types";
+import { loginHref } from "@/lib/auth/next-path";
 import { getCurrentUser } from "@/lib/auth/server";
 import { safeCartItemCount } from "@/lib/cart/current-cart";
 import { cn } from "@/lib/utils";
@@ -75,7 +76,9 @@ export async function SiteHeader() {
                 variant="ghost"
                 size="sm"
                 className={ON_SURFACE_GHOST}
-                render={<Link href="/login" />}
+                // A plain anchor: the login route redirects to the identity
+                // service, which a client-side `<Link>` navigation cannot follow.
+                render={<a href={loginHref()} />}
               >
                 Entrar
               </Button>
