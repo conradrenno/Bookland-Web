@@ -1,5 +1,13 @@
 # 02 — Autenticação
 
+> ⚠️ **Superada em boa parte (2026-10-09).** Esta spec descreve o login JWT caseiro de julho
+> (`POST /auth/login`, `/refresh`, `/logout`), que **não existe mais**. O desenho atual — o BFF
+> como client OAuth2 confidencial, PKCE, senha digitada na identidade, `proxy.ts`, refresh de uso
+> único com memória de 30 s — está na [21-backend-alignment.md](21-backend-alignment.md) (etapa 3)
+> e no `CONTEXT.md`. **Continua valendo daqui:** tokens só em cookies httpOnly, o browser nunca vê
+> token, renovação antes do render porque Server Component não escreve cookie, e `?next=`
+> sempre sanitizado.
+
 Cobre US-01 (registro), US-02 (login), US-03 (refresh), US-04 (logout).
 
 ## Decisão: JWT em cookies httpOnly, refresh server-side

@@ -61,7 +61,23 @@ describe("getCart", () => {
     expect(result.items[0].quantity).toBe(2);
   });
 
-  it("surfaces a missing session as a refresh-worthy 401", async () => {
+  it("reads a cart that was never created as an empty one, not an error", async () => {
+    // A customer who never added anything gets ids of null and nothing is
+    // created upstream (docs/specs/21).
+    server.use(
+      http.get(CART_URL, () =>
+        HttpResponse.json({ ...cart(), id: null, updatedAt: null, total: 0 }),
+      ),
+    );
+
+    const result = await getCart(TOKEN);
+
+    expect(result.id).toBeNull();
+    expect(result.items).toEqual([]);
+    expect(cartItemCount(result)).toBe(0);
+  });
+
+  it("surfaces a missing session as a session problem", async () => {
     server.use(
       http.get(CART_URL, () =>
         HttpResponse.json(

@@ -1,5 +1,13 @@
 # 09 — Notas de contrato (⚠️ divergências)
 
+> ⚠️ **Registro histórico do backend de julho/agosto.** Desde 2026-10-09 o contrato são três
+> OpenAPI em [`docs/openapi/`](../openapi/) e o contrato de erro é o `docs/error-contract.md` do
+> backend. Itens que **mudaram**: auth (itens 12 e 13 — agora OAuth2, sem `INVALID_CREDENTIALS`
+> nem `INVALID_REFRESH_TOKEN`), o checkout (item 27 — agora saga assíncrona, `CART_EMPTY` 409 no
+> lugar de `CART_NOT_FOUND` 404, `PENDING` existe), o cancelamento (só de `CONFIRMED`) e o
+> `GET /cart` de cliente novo (`id`/`updatedAt` nulos). O quadro completo está na
+> [21-backend-alignment.md](21-backend-alignment.md).
+
 Colisões entre as **stories do Linear** e a **API Bookland** (`docs/bookland-openapi.json`
 + Spring rodando).
 

@@ -263,16 +263,23 @@ Por arquivo:
 - [x] Testes: `status.test.ts`, `status-timeline.test.tsx`, `checkout-form.test.tsx` (códigos novos),
       `order-progress` com timers falsos (para no desfecho, para no teto), a rota `GET` com MSW.
 
-### Etapa 5 — ajustes menores e documentação
+### Etapa 5 — ajustes menores e documentação ✅
 
-- [ ] `GET /cart` com `id: null`: conferir `cart.ts`, `current-cart.ts` e a página — tratar como vazio.
-- [ ] Itens "Unavailable" (catálogo fora): `cart-line.tsx` já trata `available: false`; conferir o
+**Feita em 2026-10-09.** Nada a mudar no código para o carrinho com `id: null` (ninguém lia o
+`id`) nem para os itens indisponíveis (a linha já mostra "Indisponível" e o resumo já bloqueia o
+checkout) — ficaram testes fixando os dois comportamentos. Reviews **não existem no BFF ainda**,
+então o item delas vira nota para quando entrarem. As specs 02, 09, 19 e 20 ganharam um aviso no
+topo apontando o que esta spec substituiu, em vez de reescrita: são registro histórico. A
+deprecação do `middleware.ts` foi resolvida na etapa 3.
+
+- [x] `GET /cart` com `id: null`: conferir `cart.ts`, `current-cart.ts` e a página — tratar como vazio.
+- [x] Itens "Unavailable" (catálogo fora): `cart-line.tsx` já trata `available: false`; conferir o
       título que chega como placeholder e o checkout bloqueando "Pagar" com item indisponível.
-- [ ] Reviews: a lista já vem da mais nova para a mais antiga (tirar qualquer ordenação no BFF);
+- [x] Reviews: a lista já vem da mais nova para a mais antiga (tirar qualquer ordenação no BFF);
       `DUPLICATE_REVIEW` também em corrida.
-- [ ] Remover as menções à rota de estorno avulso (`client.ts`, `payments.ts`).
-- [ ] Teste do invariante R2 (catálogo sem `Authorization`).
-- [ ] Atualizar o `CONTEXT.md` (a seção "API Bookland — referência" inteira), [02](02-auth.md),
+- [x] Remover as menções à rota de estorno avulso (`client.ts`, `payments.ts`).
+- [x] Teste do invariante R2 (catálogo sem `Authorization`).
+- [x] Atualizar o `CONTEXT.md` (a seção "API Bookland — referência" inteira), [02](02-auth.md),
       [09](09-contract-notes.md), [19](19-checkout.md) e [20](20-orders-history.md).
 
 ## Fora desta spec

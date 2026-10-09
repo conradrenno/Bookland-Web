@@ -1,5 +1,13 @@
 # 19 — Checkout e pedido (Etapa 5b)
 
+> ⚠️ **Atualizada pela [21-backend-alignment.md](21-backend-alignment.md) (2026-10-09).** O
+> checkout não é mais síncrono: responde **202** com o pedido `PENDING`, e a página do pedido
+> acompanha até `CONFIRMED`, `REJECTED` ou `PAYMENT_FAILED` (`OrderOutcome`). O carrinho só
+> esvazia no `CONFIRMED`; carrinho vazio é **409 `CART_EMPTY`**; há também
+> `CHECKOUT_IN_PROGRESS` e `CATALOG_UNAVAILABLE`. O resto — só `paymentMethod` sai do navegador,
+> o formulário não dispara duas vezes, falhas que só o carrinho resolve navegam para ele — segue
+> valendo.
+
 > Fecha US-14 e, de quebra, US-18. O contrato está em
 > [05-cart-checkout.md](05-cart-checkout.md) e [06-orders.md](06-orders.md);
 > esta spec é o **plano de implementação** da etapa, no formato da

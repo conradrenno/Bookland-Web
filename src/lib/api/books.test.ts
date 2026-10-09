@@ -35,6 +35,22 @@ function captureQuery(path: string) {
 }
 
 describe("searchBooks", () => {
+  it("never sends a token: the catalogue is public, and a stale one would 401", async () => {
+    // Since the API became a resource server, an expired or corrupt token fails
+    // the request even on a public route (docs/specs/21, R2).
+    const seen: { auth?: string | null } = {};
+    server.use(
+      http.get(`${BASE}/api/v1/books`, ({ request }) => {
+        seen.auth = request.headers.get("Authorization");
+        return HttpResponse.json(emptyPage);
+      }),
+    );
+
+    await searchBooks({});
+
+    expect(seen.auth).toBeNull();
+  });
+
   it("returns the page as the upstream sent it", async () => {
     const page: PageResult<BookViewModel> = { ...emptyPage, page: 1, totalElements: 5, totalPages: 3 };
     server.use(http.get(`${BASE}/api/v1/books`, () => HttpResponse.json(page)));

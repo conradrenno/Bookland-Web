@@ -22,9 +22,9 @@ export const metadata: Metadata = {
  * US-14 — the confirmation step.
  *
  * A Server Component that reads the cart and hands the numbers to one client
- * island. There is no payment step after this: the upstream charges inside the
- * checkout call and answers with an order that is already `CONFIRMED`
- * (docs/specs/19-checkout.md).
+ * island. There is no payment step after this: confirming starts the backend's
+ * checkout saga, which reserves the stock and charges on its own, and the order
+ * page follows it to its outcome (docs/specs/21).
  */
 export default async function CheckoutPage() {
   const cart = await readCart();

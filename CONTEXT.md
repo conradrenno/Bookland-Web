@@ -3,16 +3,19 @@
 > Handoff gerado para dar contexto imediato à próxima sessão do Claude Code.
 > Abra a sessão **nesta pasta** (`bookland-web`) para o contexto nascer isolado.
 
-## ⚠️ Leia antes de tudo (2026-10-08)
+## ⚠️ Leia antes de tudo (2026-10-09)
 
-O backend mudou muito desde agosto: virou **5 serviços** (gateway `:8080`, API `:8083`, catálogo
-`:8082`, identidade `:9000`, notificação), o login virou **OAuth2 authorization code + PKCE** (as
-rotas `/auth/login`, `/refresh`, `/logout` **não existem mais**) e o checkout virou **saga
-assíncrona** (202 com o pedido `PENDING`). **A seção "API Bookland — referência" abaixo descreve o
-backend de julho.** O plano de alinhamento é a
-[`docs/specs/21-backend-alignment.md`](docs/specs/21-backend-alignment.md): **etapa 1 feita** (no
-backend, `3f34b2d`), **próxima: etapa 2** (baixar os 3 OpenAPI — 8083, 8082 e 9000 `/api-docs` —
-e atualizar `types.ts`, `error-codes.ts` e `.env.example`). Precisa dos serviços rodando.
+O backend virou **5 serviços** (gateway `:8080`, API `:8083`, catálogo `:8082`, identidade `:9000`,
+notificação), o login virou **OAuth2 authorization code + PKCE** e o checkout virou **saga
+assíncrona**. O BFF foi **alinhado** a isso em 2026-10-09 — plano e registro em
+[`docs/specs/21-backend-alignment.md`](docs/specs/21-backend-alignment.md), etapas 1 a 5 feitas.
+
+**O que ainda não rodou ao vivo:** o login pela identidade e o checkout assíncrono foram testados
+com MSW, mas **nem a sondagem nem o `pnpm test:smoke` rodaram** contra a stack — esperam o OK do
+dono (eles cadastram usuários e compram de verdade).
+
+**Para rodar:** `pnpm dev` (agora sobe em **`http://127.0.0.1:3000`** — abra por esse endereço, não
+por `localhost`) com `.env.local` contendo `BOOKLAND_OAUTH_CLIENT_SECRET` (ver `.env.example`).
 
 ## O que é este projeto
 
@@ -25,81 +28,69 @@ Papéis do Next aqui:
 
 ## API Bookland — referência
 
-- **Rodando em:** `http://localhost:8080`
-- **Swagger UI:** `http://localhost:8080/swagger-ui/index.html`
-- **OpenAPI JSON (caminho customizado!):** `http://localhost:8080/api-docs`
-  - ⚠️ **Não** é o default `/v3/api-docs` — esse retorna **403**. O correto é `/api-docs`.
-  - Spec é gerado em runtime (não existe arquivo no projeto Java).
-- **Spec salvo localmente:** ~~`docs/bookland-openapi.json`~~ → desde 2026-10-09, um por serviço em [`docs/openapi/`](docs/openapi/) (ver spec 21)
-  - OpenAPI **3.1.0** · **39 endpoints** · **38 schemas** (salvo sem BOM, indentado)
-  - Para atualizar: rebaixar o conteúdo de `http://localhost:8080/api-docs`.
-  - **Atualização 2026-07-25:** `BookViewModel`/`Create`/`UpdateBookRequest` ganharam
-    **`coverImageUrl`** (capa, opcional) + novo `POST /books/{bookId}/cover` (upload).
-  - **Atualização 2026-07-27 (dono ajustou o backend):**
-    - `ReviewViewModel` + **`customerName`** → resolve o gap do nome no review.
-    - `coverImageUrl` em **`CartItemViewModel`** (+ `title` e `available`),
-      `OrderItemViewModel`, `WishlistItemViewModel`, `LowStockBookViewModel`
-      → **acaba a necessidade de agregação no BFF** para miniaturas.
-    - Novo **`GET /admin/orders?status=&page=&size=`**
-      (`PageResultAdminOrderSummaryViewModel`) → destrava o painel admin (fase 2).
-    - `CreateBookRequest.isbn`: regex afrouxada para aceitar hífen/espaço.
-  - **Atualização 2026-07-27 (tarde) — auth/erros no spec:**
-    - `components.securitySchemes.bearerAuth` (JWT) + `security` global.
-    - **`ProblemDetail`** (RFC 7807 + **`code`** estável) e
-      **`ValidationProblemDetail`** (`errors: { campo: [msgs] }`) tipados;
-      todo endpoint declara `default` (erro) e a maioria `400`.
-    - Sucesso mudou em vários: register **201**, logout **204**, DELETEs **204**,
-      `POST /books` e `POST reviews` **201** → `apiFetch` não pode parsear 204.
-    - ⚠️ `security` global também marca os **públicos** (login/register/books/
-      categories) como autenticados — inofensivo em runtime, ruim p/ codegen.
+| Serviço | Endereço | O BFF usa para |
+|---|---|---|
+| **Gateway** | `http://localhost:8080` (`BOOKLAND_API_URL`) | tudo da loja: catálogo, carrinho, pedidos, pagamentos, reviews; capas em `/media/**` |
+| API (monólito) | `:8083` | — (atrás do gateway) |
+| Catálogo | `:8082` | — (atrás do gateway) |
+| **Identidade** | `http://127.0.0.1:9000` (`BOOKLAND_IDENTITY_URL`) | login OAuth2, cadastro, conta. **Não** passa pelo gateway |
+| Mailpit | `:8025` | e-mails de desfecho do pedido (dev) |
+
+- **OpenAPI:** um por serviço, salvos em [`docs/openapi/`](docs/openapi/) (`api`, `catalog`,
+  `identity`). Para atualizar, rebaixar `:8083/api-docs`, `:8082/api-docs` e `:9000/api-docs` —
+  o gateway **não** roteia `/api-docs`.
+- **Contrato de erro:** `docs/error-contract.md` **do backend** é a fonte; o espelho é
+  `src/lib/api/error-codes.ts`. `problem+json` com `code` estável — ramificar por `code`.
 
 ### Autenticação
-JWT clássico: `POST /api/v1/auth/{login,register,refresh,logout}`.
-Decidido: access + refresh em **cookies httpOnly**, refresh/rotação server-side.
 
-✅ **Destravado (2026-07-27, tarde):** a API agora separa **401** (identidade) de
-**403** (permissão), com `problem+json` + **`code`** estável (`TOKEN_MISSING`,
-`TOKEN_INVALID`, `TOKEN_EXPIRED`, `INSUFFICIENT_ROLE`, `INVALID_CREDENTIALS`,
-`INVALID_REFRESH_TOKEN`…). Verificado ao vivo. O `apiFetch` ramifica por `code`.
+**Spring Authorization Server** na identidade. O BFF é um **client confidencial** (`bookland-web`,
+`client_secret_basic`, PKCE obrigatório) e faz o fluxo no servidor:
 
-- Claims do access token: `{ sub, email, role, iat, exp }` (id em **`sub`**), HS384.
-- TTL: access **24 h**, refresh **7 dias**.
-- **Refresh rotaciona** — cada renovação invalida o refresh anterior; o BFF
-  **precisa regravar os dois cookies**. Logout revoga de verdade.
+```
+GET  /api/auth/login?next=   → state + verifier em cookie curto → 302 /oauth2/authorize
+GET  /api/auth/callback      → confere state → POST /oauth2/token → bl_access, bl_refresh, bl_id
+POST /api/auth/logout        → /oauth2/revoke → 303 /connect/logout?id_token_hint=…
+POST /api/auth/register      → POST {identidade}/api/v1/auth/register → 201, sem token
+```
 
-✅ **2026-07-28:** `POST /auth/register` consertado (**201**; duplicata → **409
-`EMAIL_ALREADY_EXISTS`**) e `/error` liberado (**500 `INTERNAL_ERROR`** em
-problem+json). Matriz de auth reconferida — **sem regressão**.
-**Não há mais bloqueio de contrato para o BFF.**
+- A senha é digitada **na página da identidade**, nunca no Next.
+- Access **15 min**, refresh **7 dias**, **de uso único** (rotaciona). RS256.
+- Claims do access: `sub` (id), `email`, `role`, `name`, `aud = bookland-api`.
+- Renovação **no `proxy.ts`**, via `renewTokens`: uma chamada por refresh token, com memória de
+  30 s para a rajada de requisições de uma página. Recusa (`invalid_grant`) → `SESSION_ENDED`.
+- `TOKEN_EXPIRED` vale refresh; `TOKEN_INVALID` **encerra** a sessão. Token ruim derruba até rota
+  pública — por isso o catálogo nunca manda `Authorization`.
+- Toda entrada de login é **navegação completa** (`<a>`/`navigateTo`), porque termina em outra
+  origem; o logout é um `<form method="post">`.
+- O segredo do client difere: perfil dev do backend `bookland-web-secret`; compose = o
+  `OAUTH2_CLIENT_SECRET` do `.env` do backend.
 
-**Credenciais de admin (perfil dev):** `admin@bookland.com` / **`admin1234`**
-(vêm de `bookland.admin.*` no `application.yml` do backend). Com elas, tudo que
-dependia de ADMIN foi verificado em 2026-07-28.
+### Checkout
 
-> ⚠️ **Único bug aberto no backend (item 21):** `POST /auth/register` devolve
-> **500 intermitente**. Causa raiz achada no log: H2
-> `The database has been closed` ao avaliar o **único CHECK do schema**
-> (`users.role`) — rotatividade de conexão do pool, não modelagem.
-> Fix sugerido: `spring.datasource.hikari.max-lifetime: 0` no perfil dev.
-> Contorno: reiniciar a app. **Não bloqueia o BFF.**
+**Saga assíncrona:** `POST /cart/checkout` responde **202** com o pedido `PENDING`; o desfecho
+(`CONFIRMED`, `REJECTED`, `PAYMENT_FAILED` + `statusReason`) chega segundos depois. O carrinho só
+esvazia no `CONFIRMED`. A página do pedido acompanha (`OrderOutcome`, polling de 1,5 s até 60 s).
+Cancelar **só de `CONFIRMED`**; o estorno é assíncrono (`REFUND_PENDING` → `REFUNDED`).
 
 ### Grupos de endpoints
 
-**🛍️ Loja (cliente)**
-- `books` — GET/POST/GET{id}/PATCH{id}/DELETE{id} `/api/v1/books` · `POST /books/{id}/cover` (upload capa)
+**🛍️ Loja (cliente)** — via gateway
+- `books` — `GET /books`, `GET /books/{id}` (+ admin: POST/PATCH/DELETE, `POST /books/{id}/cover`)
 - `categories` — `GET /categories`, `GET /categories/{id}/books`
 - `reviews` — `GET/POST /books/{id}/reviews`, `DELETE /books/{id}/reviews/{reviewId}`
 - `cart` — `GET /cart`, `POST /cart/items`, `PATCH|DELETE /cart/items/{bookId}`, `POST /cart/checkout`
 - `wishlist` — `GET /wishlist`, `POST /wishlist/items`, `DELETE /wishlist/items/{bookId}`, `POST /wishlist/items/{bookId}/move-to-cart`
 - `orders` — `GET /orders`, `GET|DELETE /orders/{orderId}`
 - `payments` — `GET /payments/order/{orderId}`
-- `users` — `GET|PUT|DELETE /users/{id}`
+
+**👤 Identidade** — direto no `:9000`
+- `POST /api/v1/auth/register`, `GET|PUT|DELETE /api/v1/users/{id}`, OAuth2/OIDC
 
 **🔧 Admin**
-- `admin-orders` — `GET /admin/orders/{orderId}`, `PATCH /admin/orders/{orderId}/status`, `GET /admin/orders/customer/{customerId}`
-- `admin-payments` — `POST /admin/payments/order/{orderId}/refund`
-- `inventory` — `GET /inventory/low-stock`
-- `book-inventory` — `PATCH /books/{bookId}/inventory`, `GET /books/{bookId}/inventory/history`
+- `admin-orders` — `GET /admin/orders`, `GET /admin/orders/{orderId}`, `PATCH /admin/orders/{orderId}/status`, `GET /admin/orders/customer/{customerId}`
+- `inventory` — `GET /inventory/low-stock`, `PATCH /books/{bookId}/inventory`, `GET /books/{bookId}/inventory/history`
+- O estorno avulso (`/admin/payments/.../refund`) **não existe mais** — estornar é cancelar.
 
 ## MVP sugerido (a confirmar nas specs)
 
@@ -161,22 +152,19 @@ Fase 2: wishlist, área de conta, painel admin.
 - [x] **Alinhamento, etapa 1 (2026-10-08):** BFF registrado no servidor de autorização (backend
       `3f34b2d`); o logout OIDC do backend foi corrigido no caminho.
       → [`21-backend-alignment.md`](docs/specs/21-backend-alignment.md)
-- [ ] **Próxima: alinhamento, etapa 2** (contrato) — depois 3 (auth OAuth2), 4 (checkout
-      assíncrono), 5 (ajustes). Reviews na página do livro
-      ([04](docs/specs/04-reviews.md)) ficam para depois do alinhamento
-- [ ] **Backend (do dono):** item 21 (register 500 — H2/Hikari) e item 24
-      (`stockQuantity` primitivo — e **item 26**, o mesmo defeito em
-      `AddCartItemRequest.quantity`). Cosmético: itens 16 e 20.
-      ✅ A ordenação de `GET /orders` (item 28) **já foi resolvida** — `932727f`
+- [x] **Alinhamento, etapas 2–5 (2026-10-09):** contrato em 3 OpenAPI, login OAuth2 + PKCE pela
+      identidade, `proxy.ts`, checkout assíncrono com `OrderOutcome`. **497 unit verdes.**
+- [ ] **Conferir ao vivo** o login e o checkout novos (`pnpm test:smoke` e uma passada no
+      navegador) — esperando o OK do dono
+- [ ] **Próximo:** reviews na página do livro ([04](docs/specs/04-reviews.md))
 
-## 🚦 Onde paramos — leia isto primeiro (2026-08-05)
+## 🚦 Onde paramos — leia isto primeiro (2026-10-09)
 
-**O MVP de compra está fechado ponta a ponta: catálogo → detalhe → carrinho →
-checkout → pedido → histórico → cancelamento.** Etapas 1 a 6 feitas, testadas e
-verificadas contra o Spring no ar.
+**O MVP de compra está fechado ponta a ponta e alinhado ao backend em microsserviços.** As seções
+de etapa abaixo são o histórico de agosto; o que mudou depois está na spec 21.
 
-Comandos: `pnpm test:run` (**435** unit), `pnpm test:smoke` (**41** contra o
-Spring **no ar**), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
+Comandos: `pnpm test:run` (**497** unit), `pnpm test:smoke` (contra a stack **no ar**, cadastra os
+próprios clientes), `pnpm typecheck`, `pnpm lint`, `pnpm build` — unit, lint e build limpos.
 
 > ⚠️ Os números de teste citados nas etapas antigas acima estão **desatualizados**
 > por construção — cada etapa registrou o seu. O valor corrente é o desta seção.
@@ -227,28 +215,30 @@ categorias, detalhe do livro, header e footer em todas as páginas.
 
 ```
 lib/          config.ts · utils.ts · format.ts (preço/data/nota pt-BR)
-lib/api/      client.ts (apiFetch) · url.ts · errors.ts · problem.ts
+lib/          navigation.ts (navegação completa, mockável)
+lib/api/      client.ts (apiFetch, `baseUrl` opcional) · url.ts · errors.ts · problem.ts
               error-codes.ts · error-messages.ts · types.ts · uuid.ts
               bff-mutate.ts (browser → nossas rotas, resultado normalizado)
               auth.ts / auth-client.ts · cart.ts / cart-client.ts
               orders.ts / orders-client.ts · checkout-client.ts · payments.ts
               books.ts · categories.ts · covers.ts
-lib/auth/     session.ts · cookies.ts · refresh.ts · protected-routes.ts
-              server.ts · next-path.ts
+lib/auth/     oauth.ts (PKCE, token, revoke, end-session) · login-failure.ts
+              session.ts · cookies.ts · refresh.ts · protected-routes.ts
+              server.ts · next-path.ts (+ loginHref)
 lib/catalog/  search-href.ts (href do catálogo) · use-catalog-params.ts
 lib/cart/     current-cart.ts (cookie → carrinho, memoizado; contagem segura)
 lib/checkout/ payment-schema.ts   lib/payments/ labels.ts
-lib/orders/   status.ts (OrderStatus → rótulo, cor, cancelável)
+lib/orders/   status.ts (OrderStatus → rótulo, cor, cancelável; checkout em andamento)
 lib/forms/    apply-api-error.ts
 app/          layout.tsx (shell) · page.tsx (catálogo) · error · loading · not-found
 app/api/      _shared.ts (helpers de route handler)
-app/api/auth/{login,register,logout,refresh}/route.ts
+app/api/auth/{login,callback,logout,register}/route.ts
 app/api/cart/items/route.ts · items/[bookId]/route.ts · checkout/route.ts
-app/api/orders/[orderId]/route.ts   (DELETE — cancelamento)
+app/api/orders/[orderId]/route.ts   (GET — polling · DELETE — cancelamento)
 app/(auth)/   layout.tsx · login/page.tsx · register/page.tsx
 app/(storefront)/ categories · books/[bookId] · cart · checkout
                   orders · orders/[orderId]
-components/auth/    login-form · register-form · auth-card
+components/auth/    register-form · auth-card
 components/form/    form-alert · text-field
 components/cart/    add-to-cart-button · cart-line · quantity-stepper
                     cart-summary · empty-cart
@@ -258,12 +248,12 @@ components/checkout/ checkout-form · payment-method-picker · payment-fields
                      order-review
 components/orders/  order-items · order-payment · order-status-badge
                     status-timeline · order-summary-card · empty-orders
-                    cancel-order-button
+                    cancel-order-button · order-outcome (acompanha o checkout)
 components/layout/  site-header · site-footer · header-shell · categories-menu
                     account-menu · mobile-nav · payment-marks · cart-button
 components/ui/      pagination (genérica, `hrefFor`) · alert-dialog · …
-middleware.ts
-test/msw.ts · test/dom.ts
+proxy.ts      (gate de rota + renovação de token)
+test/msw.ts · test/dom.ts · test/live-login.ts (fluxo OAuth2 à mão, só no smoke)
 ```
 
 ### 🟡 Pendências conhecidas do 4b (não bloqueiam)
@@ -310,10 +300,11 @@ O Vitest agora tem **dois projetos**: `node` (`*.test.ts`, `src/lib/**`) e
    [`15-code-conventions.md`](docs/specs/15-code-conventions.md).
 2. **HTTP se testa com MSW**, não com dublê injetado nem `globalThis.fetch`
    mockado. Foi o que permitiu deletar a camada de transporte.
-3. **Renovação de token mora no middleware**, não no `apiFetch`. Motivo técnico:
+3. **Renovação de token mora no `proxy.ts`**, não no `apiFetch`. Motivo técnico:
    Server Component **não escreve cookie** (`cookies()` é read-only no render) e
-   o refresh **rotaciona** — renovar sem persistir mataria a sessão na
-   requisição seguinte. Ver [`02-auth.md`](docs/specs/02-auth.md).
+   o refresh é **de uso único** — renovar sem persistir mataria a sessão na
+   requisição seguinte. E passa sempre por `renewTokens`, que gasta cada refresh
+   uma vez só. Ver [`02-auth.md`](docs/specs/02-auth.md) e a spec 21.
 4. **`?next=` nunca é usado cru.** `resolveAfterAuthPath()` sanitiza antes de
    qualquer `redirect`/`router.replace` — `?next=//evil.tld` é open redirect, e
    um parâmetro repetido chega como **array** (recusado inteiro). Ver
@@ -353,16 +344,16 @@ conhecidas antes de começar:
 - `GET /books/{id}/reviews` devolve `ReviewListViewModel` com **média e
   distribuição** prontas, e `customerName` já vem no review (item da 2ª rodada);
 - criar review exige um pedido **`DELIVERED`** (`PURCHASE_REQUIRED`, verificado).
-  Como o checkout entrega `CONFIRMED` e só o ADMIN promove status, **o cliente
-  comum não consegue avaliar nada** pelo storefront. Decidir com o dono o que a
+  Como o checkout termina em `CONFIRMED` e só o ADMIN promove status, **o cliente
+  comum não consegue avaliar nada** pelo storefront. A lista já vem da mais nova
+  para a mais antiga, e `DUPLICATE_REVIEW` também cobre a corrida. Decidir com o dono o que a
   UI faz: esconder o formulário, ou mostrá-lo desabilitado com o motivo.
 
 Depois disso, o MVP acaba e começa a **fase 2** ([08](docs/specs/08-phase-2.md)):
 wishlist, área de conta, painel admin.
 
-**Limpezas que continuam pendentes** (nenhuma bloqueia): os
-`<Button render={<Link/>}>` que avisam no console, e o rename
-`middleware.ts` → `proxy.ts` que o Next 16 pede.
+**Limpeza que continua pendente** (não bloqueia): os `<Button render={<Link/>}>`
+que avisam no console. O rename `middleware.ts` → `proxy.ts` foi feito na spec 21.
 
 ### 🟡 Achados abertos desta etapa (não bloqueiam)
 
@@ -382,10 +373,8 @@ wishlist, área de conta, painel admin.
    `menuitem` e o teclado do menu, e é isso que o `render` preserva. A troca por
    âncora estilizada vale para CTA, não aqui.
 
-⚠️ **Aviso do build (não urgente):** o Next 16 marca `middleware.ts` como
-convenção **deprecada** em favor de `proxy.ts`. Só um rename + ajuste de
-assinatura, mas mexe no núcleo da renovação de token — fazer isoladamente, numa
-etapa só dele.
+✅ O aviso do Next 16 sobre `middleware.ts` acabou: virou `proxy.ts` na etapa 3
+da spec 21, junto com a reescrita da renovação.
 
 ## Decisões fixadas (2026-07-24)
 
@@ -395,7 +384,8 @@ etapa só dele.
 4. **BFF:** agregador (compõe/molda quando útil).
 
 > ⚠️ Divergências contrato × stories catalogadas em `docs/specs/09-contract-notes.md`
-> (cancelamento via DELETE, ausência de `PENDING`, status via rota admin, etc.).
+> (cancelamento via DELETE, status via rota admin, etc.). `PENDING` **voltou** a existir com a
+> saga — ver spec 21.
 
 ## Decisões fixadas (2026-07-28) — durante a implementação do BFF
 

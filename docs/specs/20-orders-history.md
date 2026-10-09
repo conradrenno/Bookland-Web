@@ -1,5 +1,10 @@
 # 20 — Histórico e cancelamento (Etapa 6)
 
+> ⚠️ **Atualizada pela [21-backend-alignment.md](21-backend-alignment.md) (2026-10-09).**
+> Cancelar agora é permitido **só de `CONFIRMED`** (antes também de `AWAITING_PAYMENT`), e o
+> estorno é assíncrono (`REFUND_PENDING` → `REFUNDED`/`REFUND_FAILED`). A lista ganhou os
+> status `PENDING` ("Processando") e `REJECTED` ("Recusado").
+
 > Fecha **US-15** (histórico) e **US-16** (cancelar). O contrato está em
 > [06-orders.md](06-orders.md); esta spec é o **plano de implementação**, no
 > formato da [19-checkout.md](19-checkout.md). Decisões tomadas com o dono em
