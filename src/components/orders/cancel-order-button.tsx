@@ -95,8 +95,8 @@ export function CancelOrderButton({ orderId, totalAmount }: CancelOrderButtonPro
         <AlertDialogHeader>
           <AlertDialogTitle>Cancelar este pedido?</AlertDialogTitle>
           <AlertDialogDescription>
-            Os itens voltam para o estoque e o pagamento de {formatPrice(totalAmount)} é estornado.
-            Não é possível desfazer.
+            Os itens voltam para o estoque e o estorno de {formatPrice(totalAmount)} é iniciado —
+            ele pode levar alguns instantes. Não é possível desfazer.
           </AlertDialogDescription>
         </AlertDialogHeader>
 

@@ -75,31 +75,42 @@ describe("checkout", () => {
     expect(result.id).toBe(ORDER_ID);
   });
 
-  it("returns an order that is already confirmed and paid", async () => {
-    // Not AWAITING_PAYMENT, whatever the story says: this backend charges inside
-    // the checkout call (09-contract-notes.md item 27).
-    server.use(http.post(CHECKOUT_URL, () => HttpResponse.json(order())));
+  it("hands back the order PENDING: the checkout has only started", async () => {
+    // An asynchronous saga since the backend split up — the outcome arrives as
+    // the order's status later (docs/specs/21).
+    server.use(
+      http.post(CHECKOUT_URL, () =>
+        HttpResponse.json(order({ status: "PENDING", statusHistory: [] }), { status: 202 }),
+      ),
+    );
 
     const result = await checkout(TOKEN, "CREDIT_CARD");
 
-    expect(result.status).toBe("CONFIRMED");
-    expect(result.statusHistory[0]).toMatchObject({
-      fromStatus: "AWAITING_PAYMENT",
-      toStatus: "CONFIRMED",
-    });
+    expect(result.status).toBe("PENDING");
+    expect(result.statusHistory).toEqual([]);
   });
 
-  it("surfaces an empty cart as 404 CART_NOT_FOUND, not a conflict", async () => {
+  it("surfaces an empty cart as 409 CART_EMPTY", async () => {
+    server.use(
+      http.post(CHECKOUT_URL, () => problem(409, ErrorCodes.CART_EMPTY, "The cart is empty")),
+    );
+
+    const error = await checkout(TOKEN, "PIX").catch((e: unknown) => e);
+
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_EMPTY);
+    expect(isApiError(error) && error.isConflict).toBe(true);
+  });
+
+  it("surfaces a checkout already running as 409 CHECKOUT_IN_PROGRESS", async () => {
     server.use(
       http.post(CHECKOUT_URL, () =>
-        problem(404, ErrorCodes.CART_NOT_FOUND, "Cart not found for customer: …"),
+        problem(409, ErrorCodes.CHECKOUT_IN_PROGRESS, "A checkout is already running"),
       ),
     );
 
     const error = await checkout(TOKEN, "PIX").catch((e: unknown) => e);
 
-    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_NOT_FOUND);
-    expect(isApiError(error) && error.isNotFound).toBe(true);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.CHECKOUT_IN_PROGRESS);
   });
 
   it("surfaces the stock re-validation as a 409 the caller can branch on", async () => {

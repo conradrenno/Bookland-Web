@@ -26,7 +26,8 @@ const order = {
   id: ORDER_ID,
   customerId: "224d5247-205a-4c88-868b-80672a010493",
   items: [],
-  status: "CONFIRMED",
+  status: "PENDING",
+  statusReason: null,
   totalAmount: 139.8,
   statusHistory: [],
   createdAt: "2026-07-30T19:55:57.117193400Z",
@@ -64,7 +65,7 @@ describe("CheckoutForm", () => {
     server.use(
       http.post(CHECKOUT_ROUTE, async ({ request }) => {
         seen.body = await request.json();
-        return HttpResponse.json(order);
+        return HttpResponse.json(order, { status: 202 });
       }),
     );
     const user = userEvent.setup();
@@ -77,8 +78,8 @@ describe("CheckoutForm", () => {
     expect(JSON.stringify(seen.body)).not.toContain("4111");
   });
 
-  it("takes the customer to the order it just created", async () => {
-    server.use(http.post(CHECKOUT_ROUTE, () => HttpResponse.json(order)));
+  it("takes the customer to the order whose checkout just started", async () => {
+    server.use(http.post(CHECKOUT_ROUTE, () => HttpResponse.json(order, { status: 202 })));
     const user = userEvent.setup();
     render(<CheckoutForm total={139.8} />);
 
@@ -86,8 +87,8 @@ describe("CheckoutForm", () => {
     await user.click(submit());
 
     await waitFor(() => expect(push).toHaveBeenCalledWith(`/orders/${ORDER_ID}`));
-    // The header badge still counts a cart that is now an order.
-    expect(refresh).toHaveBeenCalled();
+    // The cart is only emptied once the order is CONFIRMED, so the badge stays.
+    expect(refresh).not.toHaveBeenCalled();
   });
 
   it("defaults to PIX and asks for its key alone", () => {
@@ -162,7 +163,7 @@ describe("CheckoutForm", () => {
   });
 
   it("sends the customer to the cart when it emptied elsewhere", async () => {
-    server.use(errorRoute(404, ErrorCodes.CART_NOT_FOUND));
+    server.use(errorRoute(409, ErrorCodes.CART_EMPTY));
     const user = userEvent.setup();
     render(<CheckoutForm total={139.8} />);
 
@@ -183,6 +184,36 @@ describe("CheckoutForm", () => {
     await waitFor(() =>
       expect(navigateTo).toHaveBeenCalledWith(`/api/auth/login?next=${encodeURIComponent("/checkout")}`),
     );
+  });
+
+  it("points to the orders when a checkout is already running", async () => {
+    server.use(errorRoute(409, ErrorCodes.CHECKOUT_IN_PROGRESS));
+    const user = userEvent.setup();
+    render(<CheckoutForm total={139.8} />);
+
+    await user.type(screen.getByLabelText("Chave PIX"), "joao@bookland.com");
+    await user.click(submit());
+
+    const alert = await screen.findByRole("alert");
+    expect(alert).toHaveTextContent("Você já tem um pedido sendo processado.");
+    expect(screen.getByRole("link", { name: "Ver meus pedidos" })).toHaveAttribute(
+      "href",
+      "/orders",
+    );
+    expect(push).not.toHaveBeenCalled();
+  });
+
+  it("asks for a retry when the catalogue is down", async () => {
+    server.use(errorRoute(503, ErrorCodes.CATALOG_UNAVAILABLE));
+    const user = userEvent.setup();
+    render(<CheckoutForm total={139.8} />);
+
+    await user.type(screen.getByLabelText("Chave PIX"), "joao@bookland.com");
+    await user.click(submit());
+
+    expect(await screen.findByRole("alert")).toHaveTextContent("Tente novamente em instantes.");
+    // Unlocked again, so the retry is one click away.
+    expect(submit()).toBeEnabled();
   });
 
   it("explains a failure it cannot navigate away from", async () => {

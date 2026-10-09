@@ -92,3 +92,19 @@ export function describeOrderStatus(status: OrderStatus): OrderStatusPresentatio
 export function isCancellable(status: OrderStatus): boolean {
   return describeOrderStatus(status).cancellable;
 }
+
+/**
+ * Whether the checkout saga is still deciding this order's fate.
+ *
+ * While it is, the order page keeps asking (docs/specs/21, stage 4): the
+ * outcome — `CONFIRMED`, `REJECTED` or `PAYMENT_FAILED` — arrives seconds later,
+ * or much later when the payment gateway is slow.
+ */
+export function isCheckoutRunning(status: OrderStatus): boolean {
+  return status === "PENDING" || status === "AWAITING_PAYMENT";
+}
+
+/** Whether the checkout ended without an order, leaving the cart as it was. */
+export function isCheckoutFailure(status: OrderStatus): boolean {
+  return status === "REJECTED" || status === "PAYMENT_FAILED";
+}

@@ -16,18 +16,19 @@ interface CheckoutBody {
 }
 
 /**
- * US-14 — turns the cart into an order.
+ * US-14 — starts turning the cart into an order.
  *
  * The one mutation in the app that spends money, and the shortest handler of the
  * lot: `paymentMethod` is the entire payload the API accepts. Anything the
  * checkout page collects beyond it is decorative and stops at the browser
  * (docs/specs/19-checkout.md).
  *
- * The response is the created order, already `CONFIRMED` and paid — the caller
- * navigates to it. Failures ride `toErrorResponse`, which keeps `status` and
- * `code` intact so the form can tell "carrinho vazio" (404 `CART_NOT_FOUND`)
- * from "acabou o estoque" (409 `CART_ITEM_UNAVAILABLE`); both send the customer
- * back to the cart, but for different reasons.
+ * Passes the upstream's **202** through with the order `PENDING`: the checkout
+ * has started, not finished. The caller navigates to the order, whose page
+ * follows it to its outcome (docs/specs/21). Failures ride `toErrorResponse`,
+ * which keeps `status` and `code` intact so the form can tell "carrinho vazio"
+ * (409 `CART_EMPTY`) from "acabou o estoque" (409 `CART_ITEM_UNAVAILABLE`) from
+ * "já tem um pedido em andamento" (409 `CHECKOUT_IN_PROGRESS`).
  */
 export async function POST(request: Request): Promise<NextResponse> {
   const token = await getAccessToken();
@@ -38,7 +39,7 @@ export async function POST(request: Request): Promise<NextResponse> {
   if (!isValidPaymentMethod(body.paymentMethod)) return invalidPaymentMethod();
 
   try {
-    return NextResponse.json(await checkout(token, body.paymentMethod));
+    return NextResponse.json(await checkout(token, body.paymentMethod), { status: 202 });
   } catch (error) {
     return toErrorResponse(error);
   }

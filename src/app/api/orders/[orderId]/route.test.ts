@@ -3,7 +3,7 @@ import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import { ErrorCodes } from "@/lib/api/error-codes";
 import { server } from "@/test/msw";
-import { DELETE } from "./route";
+import { DELETE, GET } from "./route";
 
 vi.mock("@/lib/auth/server", () => ({ getAccessToken: vi.fn() }));
 const { getAccessToken } = await import("@/lib/auth/server");
@@ -163,5 +163,54 @@ describe("DELETE /api/orders/[orderId]", () => {
 
     expect(response.status).toBe(404);
     await expect(response.json()).resolves.toMatchObject({ code: ErrorCodes.ORDER_NOT_FOUND });
+  });
+});
+
+describe("GET /api/orders/[orderId]", () => {
+  function get(orderId?: string): Promise<Response> {
+    return GET(
+      new Request(`http://localhost:3000/api/orders/${orderId ?? ORDER_ID}`),
+      context(orderId),
+    );
+  }
+
+  it("hands back the order as it stands, never from a cache", async () => {
+    server.use(
+      http.get(UPSTREAM, () =>
+        HttpResponse.json({ ...cancelledOrder, status: "PENDING", statusReason: null }),
+      ),
+    );
+
+    const response = await get();
+
+    expect(response.status).toBe(200);
+    // Polled while the checkout runs: a cached answer would freeze the status.
+    expect(response.headers.get("Cache-Control")).toBe("no-store");
+    await expect(response.json()).resolves.toMatchObject({ status: "PENDING" });
+  });
+
+  it("answers someone else's order as not found", async () => {
+    server.use(
+      http.get(UPSTREAM, () => problem(403, ErrorCodes.ORDER_ACCESS_DENIED, "Not your order")),
+    );
+
+    const response = await get();
+
+    expect(response.status).toBe(404);
+    await expect(response.json()).resolves.toMatchObject({ code: ErrorCodes.ORDER_NOT_FOUND });
+  });
+
+  it("refuses without a session, before calling upstream", async () => {
+    mockedToken.mockResolvedValue(null);
+
+    const response = await get();
+
+    expect(response.status).toBe(401);
+  });
+
+  it("refuses a malformed id locally", async () => {
+    const response = await get("not-a-uuid");
+
+    expect(response.status).toBe(400);
   });
 });

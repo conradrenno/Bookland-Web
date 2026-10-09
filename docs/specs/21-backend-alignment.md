@@ -223,31 +223,44 @@ Por arquivo:
   - smoke (`live-contract.smoke.test.ts`): o fluxo por código — GET `/login` da identidade, POST com
     CSRF e cookie `IDENTITY_SESSION`, `/oauth2/authorize`, callback do BFF. **Avisar o dono antes.**
 
-### Etapa 4 — checkout assíncrono
+### Etapa 4 — checkout assíncrono ✅ (falta conferir ao vivo)
 
-- [ ] `lib/api/orders.ts` + `api/cart/checkout/route.ts`: repassar o **202** com o pedido `PENDING`;
+**Feita em 2026-10-09.** Diferenças em relação ao plano abaixo:
+
+- O `GET /api/orders/{id}` devolve **só o pedido**: quando o status muda, o `router.refresh()`
+  re-renderiza a página no servidor, e é ela que relê o pagamento.
+- O componente se chama `OrderOutcome` (não `order-progress`): ele também explica `REJECTED` e
+  `PAYMENT_FAILED`, e agradece o `CONFIRMED` só a quem estava esperando por ele (o estado sobrevive
+  ao `router.refresh()`). Os helpers `isCheckoutRunning`/`isCheckoutFailure` ficam em
+  `lib/orders/status.ts`.
+- A linha do tempo não ganhou entrada para o pedido `PENDING` (ele ainda não tem histórico); só o
+  comentário e um teste com `changedBy: null`.
+- O smoke de checkout e de pedidos espera o pedido assentar (`settled`) e o estorno sair de
+  `REFUND_PENDING`; timeout do smoke subiu para 60 s por teste.
+
+- [x] `lib/api/orders.ts` + `api/cart/checkout/route.ts`: repassar o **202** com o pedido `PENDING`;
       as docstrings deixam de falar em "já `CONFIRMED` e pago".
-- [ ] **`GET` em `api/orders/[orderId]/route.ts`** (R9) — devolve `{ order, payment | null }`, a mesma
+- [x] **`GET` em `api/orders/[orderId]/route.ts`** (R9) — devolve `{ order, payment | null }`, a mesma
       forma que a página monta; 403 vira 404, como na página.
-- [ ] **Novo `components/orders/order-progress.tsx`** (cliente): montado só quando o status é
+- [x] **Novo `components/orders/order-progress.tsx`** (cliente): montado só quando o status é
       `PENDING`/`AWAITING_PAYMENT`; consulta o `GET` acima a cada 1,5 s, com teto de 60 s; quando o
       status muda, `router.refresh()` (re-renderiza a página inteira — pagamento e badge do carrinho
       junto, R7). Passado o teto: "seu pagamento está demorando, avisaremos por e-mail". Para ao
       desmontar e enquanto a aba está oculta (`visibilitychange`).
-- [ ] `orders/[orderId]/page.tsx`: banner de desfecho — `REJECTED`/`PAYMENT_FAILED` mostram o
+- [x] `orders/[orderId]/page.tsx`: banner de desfecho — `REJECTED`/`PAYMENT_FAILED` mostram o
       `statusReason` e "Voltar ao carrinho" (o carrinho continua lá); `CONFIRMED` agradece.
-- [ ] `checkout-form.tsx`: `CART_NOT_FOUND` → **`CART_EMPTY`**; `CHECKOUT_IN_PROGRESS` → alerta com
+- [x] `checkout-form.tsx`: `CART_NOT_FOUND` → **`CART_EMPTY`**; `CHECKOUT_IN_PROGRESS` → alerta com
       link para `/orders` (o erro não traz o id do pedido); `CATALOG_UNAVAILABLE`, `UPSTREAM_TIMEOUT`
       e `UPSTREAM_UNAVAILABLE` → alerta "tente de novo". No sucesso, o `router.refresh()` deixa de ser
       para "zerar o badge" — o carrinho só esvazia no `CONFIRMED`, e quem atualiza é o `order-progress`.
 - [x] (adiantado para a etapa 2) `lib/orders/status.ts`: `PENDING` "Processando", `REJECTED` "Recusado"; **cancelável só em
       `CONFIRMED`** (`AWAITING_PAYMENT` deixa de ser). Atualizar os comentários.
-- [ ] `status-timeline.tsx`: o histórico novo (R6) e `changedBy` nulo.
+- [x] `status-timeline.tsx`: o histórico novo (R6) e `changedBy` nulo.
 - [x] (adiantado para a etapa 2) `lib/payments/labels.ts`: `REFUND_PENDING` "Estorno em andamento", `REFUND_FAILED`
       "Estorno com problema".
-- [ ] `cancel-order-button.tsx`: o diálogo continua certo (cancelar `CONFIRMED` estorna), mas o
+- [x] `cancel-order-button.tsx`: o diálogo continua certo (cancelar `CONFIRMED` estorna), mas o
       estorno agora é assíncrono — dizer "o estorno será processado".
-- [ ] Testes: `status.test.ts`, `status-timeline.test.tsx`, `checkout-form.test.tsx` (códigos novos),
+- [x] Testes: `status.test.ts`, `status-timeline.test.tsx`, `checkout-form.test.tsx` (códigos novos),
       `order-progress` com timers falsos (para no desfecho, para no teto), a rota `GET` com MSW.
 
 ### Etapa 5 — ajustes menores e documentação

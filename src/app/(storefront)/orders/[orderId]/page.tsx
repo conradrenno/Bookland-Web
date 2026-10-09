@@ -4,6 +4,7 @@ import { notFound, redirect } from "next/navigation";
 
 import { CancelOrderButton } from "@/components/orders/cancel-order-button";
 import { OrderItems } from "@/components/orders/order-items";
+import { OrderOutcome } from "@/components/orders/order-outcome";
 import { OrderPayment } from "@/components/orders/order-payment";
 import { OrderStatusBadge } from "@/components/orders/order-status-badge";
 import { StatusTimeline } from "@/components/orders/status-timeline";
@@ -33,9 +34,11 @@ export const metadata: Metadata = {
 /**
  * US-18 — one order.
  *
- * Where the checkout lands, and where `/orders` will link in stage 6. Read-only:
- * cancelling is stage 6's, and this page exists first because a customer who has
- * just paid needs to see what they bought.
+ * Where the checkout lands, and where `/orders` links to. The checkout is
+ * asynchronous, so the customer usually arrives on a `PENDING` order:
+ * `OrderOutcome` follows it until the status moves and then re-renders this
+ * page, payment panel included (docs/specs/21, stage 4). A `PENDING` or
+ * `REJECTED` order has no payment yet, so that panel is simply absent.
  *
  * Everything shown is the **snapshot** the backend froze at checkout — prices,
  * titles and covers — so the page keeps telling the truth after the catalogue
@@ -79,6 +82,9 @@ export default async function OrderPage({ params }: OrderPageProps) {
         </div>
         <OrderStatusBadge status={order.status} className="mt-1" />
       </header>
+
+      {/* Follows a checkout still running, and explains one that failed. */}
+      <OrderOutcome orderId={order.id} status={order.status} statusReason={order.statusReason} />
 
       <div className="grid gap-8 lg:grid-cols-[1fr_18rem] lg:gap-10">
         <div className="space-y-8">

@@ -9,9 +9,11 @@ import { describeOrderStatus } from "@/lib/orders/status";
  * for `GET /admin/orders` and says nothing about this array, and a timeline that
  * runs backwards is worse than no timeline (09-contract-notes.md item 27).
  *
- * A freshly placed order has exactly one entry — `AWAITING_PAYMENT → CONFIRMED`,
- * written inside the checkout transaction. It still earns the timeline, because
- * this is the same component that will show shipping and delivery later.
+ * The checkout saga writes the first entries: `PENDING → AWAITING_PAYMENT` once
+ * the stock is reserved, then `→ CONFIRMED` or `→ PAYMENT_FAILED`; a `REJECTED`
+ * order has just `PENDING → REJECTED`. An order still `PENDING` has no history
+ * yet, so nothing renders. Saga transitions carry no `changedBy`, which this
+ * never shows anyway (docs/specs/21).
  */
 export function StatusTimeline({ history }: { history: StatusTransitionViewModel[] }) {
   if (history.length === 0) return null;

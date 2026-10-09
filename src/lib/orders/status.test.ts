@@ -1,7 +1,7 @@
 import { describe, expect, it } from "vitest";
 
 import type { OrderStatus } from "@/lib/api/types";
-import { describeOrderStatus, isCancellable } from "./status";
+import { describeOrderStatus, isCancellable, isCheckoutFailure, isCheckoutRunning } from "./status";
 
 const ALL: OrderStatus[] = [
   "PENDING",
@@ -62,5 +62,19 @@ describe("isCancellable", () => {
 
   it("never offers the action for a status it does not know", () => {
     expect(isCancellable("RETURNED" as OrderStatus)).toBe(false);
+  });
+});
+
+describe("isCheckoutRunning", () => {
+  it("is true only while the saga has not decided", () => {
+    const running = ALL.filter(isCheckoutRunning);
+    expect(running).toEqual(["PENDING", "AWAITING_PAYMENT"]);
+  });
+});
+
+describe("isCheckoutFailure", () => {
+  it("covers both ways a checkout ends without an order", () => {
+    const failed = ALL.filter(isCheckoutFailure);
+    expect(failed).toEqual(["PAYMENT_FAILED", "REJECTED"]);
   });
 });

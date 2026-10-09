@@ -53,6 +53,21 @@ describe("StatusTimeline", () => {
     expect(screen.getByText("30/07/2026, 16:55")).toBeInTheDocument();
   });
 
+  it("tells the checkout saga's steps, which carry no author", () => {
+    render(
+      <StatusTimeline
+        history={[
+          { fromStatus: "PENDING", toStatus: "AWAITING_PAYMENT", changedAt: "2026-10-09T15:00:00Z", changedBy: null },
+          { fromStatus: "AWAITING_PAYMENT", toStatus: "CONFIRMED", changedAt: "2026-10-09T15:00:02Z", changedBy: null },
+        ]}
+      />,
+    );
+
+    const entries = screen.getAllByRole("listitem").map((item) => item.textContent);
+    expect(entries[0]).toContain("Aguardando pagamento");
+    expect(entries[1]).toContain("Confirmado");
+  });
+
   it("renders nothing at all when there is no history", () => {
     const { container } = render(<StatusTimeline history={[]} />);
 

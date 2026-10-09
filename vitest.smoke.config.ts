@@ -30,5 +30,8 @@ export default defineConfig({
     exclude: ["**/node_modules/**"],
     // One upstream at a time: these tests share a running backend.
     fileParallelism: false,
+    // The checkout is a saga now: a test waits seconds for an order to settle.
+    testTimeout: 60_000,
+    hookTimeout: 30_000,
   },
 });

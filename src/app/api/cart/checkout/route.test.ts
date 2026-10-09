@@ -18,7 +18,8 @@ const order = {
   id: ORDER_ID,
   customerId: "224d5247-205a-4c88-868b-80672a010493",
   items: [],
-  status: "CONFIRMED",
+  status: "PENDING",
+  statusReason: null,
   totalAmount: 139.8,
   statusHistory: [],
   createdAt: "2026-07-30T19:55:57.117193400Z",
@@ -48,19 +49,20 @@ beforeEach(() => {
 });
 
 describe("POST /api/cart/checkout", () => {
-  it("forwards the method with the session token and answers with the order", async () => {
+  it("forwards the method with the session token and passes the 202 through", async () => {
     const seen: { body?: unknown; auth?: string | null } = {};
     server.use(
       http.post(UPSTREAM, async ({ request }) => {
         seen.body = await request.json();
         seen.auth = request.headers.get("Authorization");
-        return HttpResponse.json(order);
+        return HttpResponse.json(order, { status: 202 });
       }),
     );
 
     const response = await post({ paymentMethod: "PIX" });
 
-    expect(response.status).toBe(200);
+    // Started, not finished: the order is PENDING (docs/specs/21).
+    expect(response.status).toBe(202);
     expect(seen.body).toEqual({ paymentMethod: "PIX" });
     expect(seen.auth).toBe(`Bearer ${TOKEN}`);
     expect(await response.json()).toEqual(order);
@@ -124,17 +126,13 @@ describe("POST /api/cart/checkout", () => {
     expect(await response.json()).toMatchObject({ code: ErrorCodes.TOKEN_MISSING });
   });
 
-  it("passes the empty-cart 404 through with its code intact", async () => {
-    server.use(
-      http.post(UPSTREAM, () =>
-        problem(404, ErrorCodes.CART_NOT_FOUND, "Cart not found for customer: …"),
-      ),
-    );
+  it("passes the empty-cart 409 through with its code intact", async () => {
+    server.use(http.post(UPSTREAM, () => problem(409, ErrorCodes.CART_EMPTY, "The cart is empty")));
 
     const response = await post({ paymentMethod: "PIX" });
 
-    expect(response.status).toBe(404);
-    expect(await response.json()).toMatchObject({ code: ErrorCodes.CART_NOT_FOUND });
+    expect(response.status).toBe(409);
+    expect(await response.json()).toMatchObject({ code: ErrorCodes.CART_EMPTY });
   });
 
   it("passes the stock conflict through, since the form branches on it", async () => {

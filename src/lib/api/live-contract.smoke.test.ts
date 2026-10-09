@@ -64,6 +64,29 @@ function dateFields(node: unknown, path = ""): Array<{ path: string; value: stri
 /** `Z` or an explicit offset — anything else does not identify an instant. */
 const CARRIES_ZONE = /(Z|[+-]\d{2}:?\d{2})$/;
 
+/** Asks `read` every half second until `done` holds, or fails after `timeoutMs`. */
+async function waitFor<T>(
+  read: () => Promise<T>,
+  done: (value: T) => boolean,
+  timeoutMs = 20_000,
+): Promise<T> {
+  const deadline = Date.now() + timeoutMs;
+  for (;;) {
+    const value = await read();
+    if (done(value)) return value;
+    if (Date.now() > deadline) throw new Error(`Still waiting: ${JSON.stringify(value)}`);
+    await new Promise((resolve) => setTimeout(resolve, 500));
+  }
+}
+
+/** The order once the checkout saga has decided its fate. */
+function settled(token: string, orderId: string): Promise<OrderViewModel> {
+  return waitFor(
+    () => getOrder(token, orderId),
+    (order) => order.status !== "PENDING" && order.status !== "AWAITING_PAYMENT",
+  );
+}
+
 describe("live API smoke", () => {
   it("GET /books with query params", async () => {
     const page = await apiFetch<PageResult<BookViewModel>>("/api/v1/books", {
@@ -366,45 +389,45 @@ describe("live checkout smoke", () => {
     }
   });
 
-  it("charges on the spot: the order comes back CONFIRMED and paid", async () => {
-    // The story said PENDING and the spec guessed AWAITING_PAYMENT. Neither: the
-    // payment happens inside this call, so there is no payment step to build.
+  it("starts a saga: 202 with the order PENDING, then CONFIRMED and paid", async () => {
     await addCartItem(token, book.id, 2);
 
     const order = await checkout(token, "PIX");
 
-    expect(order.status).toBe("CONFIRMED");
+    // Started, not finished (docs/specs/21).
+    expect(order.status).toBe("PENDING");
     expect(order.items).toHaveLength(1);
     expect(order.totalAmount).toBeCloseTo(book.price * 2, 2);
-    expect(order.statusHistory).toContainEqual(
+
+    const done = await settled(token, order.id);
+    expect(done.status).toBe("CONFIRMED");
+    expect(done.statusReason).toBeNull();
+    expect(done.statusHistory).toContainEqual(
       expect.objectContaining({ fromStatus: "AWAITING_PAYMENT", toStatus: "CONFIRMED" }),
     );
+    // The saga moved it, not a person.
+    expect(done.statusHistory.every((step) => step.changedBy === null)).toBe(true);
 
-    // The same order is readable afterwards, and the payment record exists with
-    // the method the customer chose — which the order itself does not carry.
-    const fetched = await getOrder(token, order.id);
-    expect(fetched.id).toBe(order.id);
-
+    // The payment carries the method the customer chose — the order does not.
     const payment = await getOrderPayment(token, order.id);
     expect(payment).toMatchObject({ orderId: order.id, method: "PIX", status: "APPROVED" });
   });
 
-  it("empties the cart, leaving it usable rather than gone", async () => {
+  it("empties the cart once the order is confirmed", async () => {
     await addCartItem(token, book.id, 1);
-    await checkout(token, "CREDIT_CARD");
+    const order = await checkout(token, "CREDIT_CARD");
+    await settled(token, order.id);
 
     const cart = await getCart(token);
     expect(cart.items).toEqual([]);
     expect(cart.total).toBe(0);
   });
 
-  it("answers 404 CART_NOT_FOUND when there is nothing to buy", async () => {
-    // Not a 409, and it says this even though `GET /cart` happily returns an
-    // empty cart at the same moment. It is why /checkout redirects instead.
+  it("answers 409 CART_EMPTY when there is nothing to buy", async () => {
     const error = await checkout(token, "PIX").catch((e: unknown) => e);
 
-    expect(isApiError(error) && error.status).toBe(404);
-    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_NOT_FOUND);
+    expect(isApiError(error) && error.status).toBe(409);
+    expect(isApiError(error) && error.code).toBe(ErrorCodes.CART_EMPTY);
   });
 
   it("rejects a method outside the enum as a bare MALFORMED_REQUEST", async () => {
@@ -446,7 +469,7 @@ describe("live checkout smoke", () => {
     // a module left behind would send "2026-07-30T13:01:34" and the front would
     // read it in whatever zone it happens to run in.
     await addCartItem(token, book.id, 1);
-    const order = await checkout(token, "PIX");
+    const order = await settled(token, (await checkout(token, "PIX")).id);
 
     const payloads = [
       await getCart(token),
@@ -466,10 +489,9 @@ describe("live checkout smoke", () => {
 /**
  * Stage 6 — the order history and cancellation.
  *
- * Runs as the **customer** and really buys and cancels, like the block above.
- * Each test creates the orders it needs rather than sharing them: the dev
- * database is in-memory, so the account's history grows through the file and
- * nothing may assume a count.
+ * Runs as a fresh customer and really buys and cancels, like the block above.
+ * Each test creates the orders it needs rather than sharing them: the
+ * account's history grows through the file and nothing may assume a count.
  */
 describe("live orders smoke", () => {
   let token: string;
@@ -482,14 +504,16 @@ describe("live orders smoke", () => {
     expect(book).toBeDefined();
   });
 
-  /** Buys one copy as whoever holds `as`, and returns the resulting order. */
+  /** Buys one copy as whoever holds `as`, and returns the order once confirmed. */
   async function buyOne(as: string = token): Promise<OrderViewModel> {
     const current = await getCart(as);
     for (const item of current.items) {
       await removeCartItem(as, item.bookId);
     }
     await addCartItem(as, book.id, 1);
-    return checkout(as, "PIX");
+    const order = await settled(as, (await checkout(as, "PIX")).id);
+    expect(order.status).toBe("CONFIRMED");
+    return order;
   }
 
   /** An order belonging to another customer, for the isolation tests. */
@@ -570,8 +594,11 @@ describe("live orders smoke", () => {
       expect.objectContaining({ fromStatus: "CONFIRMED", toStatus: "CANCELLED" }),
     );
 
-    // The refund is automatic — nothing asked for it.
-    const payment = await getOrderPayment(token, order.id);
+    // The refund is automatic — nothing asked for it — and asynchronous.
+    const payment = await waitFor(
+      () => getOrderPayment(token, order.id),
+      (current) => current.status !== "REFUND_PENDING" && current.status !== "APPROVED",
+    );
     expect(payment.status).toBe("REFUNDED");
   });
 

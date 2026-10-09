@@ -24,21 +24,23 @@ const CHECKOUT_PATH = "/api/v1/cart/checkout";
 const ORDERS_PATH = "/api/v1/orders";
 
 /**
- * Turns the cart into an order — and, in this backend, **pays for it**.
+ * **Starts** the checkout. It does not finish it.
  *
- * Verified live (2026-07-30): the response comes back `CONFIRMED`, with the
- * `AWAITING_PAYMENT → CONFIRMED` transition already in `statusHistory` and the
- * payment approved by a simulated gateway. There is no second step to call, and
- * no payment data to send: `paymentMethod` is the only field the API accepts.
+ * The backend runs the checkout as an asynchronous saga: this answers **202**
+ * with the order `PENDING` as soon as it begins. Reserving the stock and
+ * charging happen afterwards, and the outcome arrives as the order's `status`
+ * seconds later — `CONFIRMED`, `REJECTED` (the stock ran out meanwhile) or
+ * `PAYMENT_FAILED` — readable with `getOrder` (docs/specs/21). The cart is only
+ * emptied on `CONFIRMED`. `paymentMethod` is still the only field accepted.
  *
- * Two failures are worth knowing about, both handled by the caller rather than
- * here (09-contract-notes.md item 27):
+ * What fails synchronously, before anything starts, all handled by the caller:
  *
- * - **404 `CART_NOT_FOUND`** — the cart is empty. Not a 409, and it answers this
- *   even for a cart that exists with no items.
- * - **409 `CART_ITEM_UNAVAILABLE`** — stock ran out between adding and
- *   confirming. The offending book ids appear only inside the English `detail`,
- *   so nothing structured can be extracted; `GET /cart` flags the line instead.
+ * - **409 `CART_EMPTY`** — nothing to buy (it used to be a 404 `CART_NOT_FOUND`).
+ * - **409 `CART_ITEM_UNAVAILABLE`** — the shortage is visible already; `GET
+ *   /cart` flags the line.
+ * - **409 `CHECKOUT_IN_PROGRESS`** — an earlier checkout of this customer has
+ *   not finished.
+ * - **503 `CATALOG_UNAVAILABLE`** — the catalogue could not be asked. Retry.
  */
 export function checkout(
   accessToken: string,
@@ -52,14 +54,14 @@ export function checkout(
 }
 
 /**
- * One order, with its items, totals and status history.
+ * One order, with its items, totals, status history and — once the checkout
+ * ended badly — the `statusReason`.
  *
  * Prices, titles and covers are frozen at checkout time, so what comes back is
  * what the customer bought — not what the catalogue says today.
  *
- * A missing order answers `404 ORDER_NOT_FOUND`. Someone else's order has not
- * been measured yet (it needs a second account); the page treats both as "not
- * found", which is also the right answer if it turns out to be a 403.
+ * A missing order answers `404 ORDER_NOT_FOUND`, someone else's `403
+ * ORDER_ACCESS_DENIED`; callers treat both as "not found".
  */
 export function getOrder(accessToken: string, orderId: UUID): Promise<OrderViewModel> {
   return apiFetch<OrderViewModel>(`${ORDERS_PATH}/${encodeURIComponent(orderId)}`, {
@@ -97,16 +99,17 @@ export function listOrders(
  *
  * `DELETE` names it badly: this answers **200 with an `OrderViewModel`**, not
  * 204, already `CANCELLED` and carrying the new `CONFIRMED → CANCELLED`
- * transition in `statusHistory`. Verified live.
+ * transition in `statusHistory`.
  *
- * It is not a soft delete either — the order stays in the history, and the
- * payment flips to `REFUNDED` on its own because cancelling a confirmed order
- * restores stock and refunds automatically.
+ * It is not a soft delete either — the order stays in the history. The stock
+ * goes back and a refund starts, asynchronously: the payment moves to
+ * `REFUND_PENDING`, then `REFUNDED` (docs/specs/21).
  *
  * Three failures the caller has to tell apart, all with stable codes:
  *
- * - **409 `ORDER_CANCELLATION_NOT_ALLOWED`** — already cancelled, or shipped.
- *   The likeliest of the three in practice: it is what a second click answers.
+ * - **409 `ORDER_CANCELLATION_NOT_ALLOWED`** — anything but `CONFIRMED`: still
+ *   in checkout, already cancelled, or shipped. The likeliest of the three in
+ *   practice: it is what a second click answers.
  * - **403 `ORDER_ACCESS_DENIED`** — someone else's order. The upstream refuses
  *   the mutation; verified that the target order survives untouched.
  * - **404 `ORDER_NOT_FOUND`** — no such id.

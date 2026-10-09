@@ -1,17 +1,25 @@
 /**
  * Browser-side calls to the BFF's own order routes.
  *
- * Counterpart of `orders.ts`, which runs on the server and talks to Spring:
+ * Counterpart of `orders.ts`, which runs on the server and talks to the API:
  * nothing here ever sees a token. Same split as `cart-client.ts` / `cart.ts`.
  *
- * Only the mutation lives here. Reading orders is server work — `/orders` and
- * `/orders/[orderId]` render on the server and need no browser fetch.
+ * Reading orders is server work, with one exception: an order whose checkout
+ * is still running is polled from the browser until its status moves
+ * (docs/specs/21, stage 4).
  */
 
 import { bffMutate, type BffResult } from "./bff-mutate";
 import type { OrderViewModel, UUID } from "./types";
 
 const ORDERS_ROUTE = "/api/orders";
+
+/** The order as it stands now, for the page that waits on a checkout. */
+export function readOrder(orderId: UUID): Promise<BffResult<OrderViewModel>> {
+  return bffMutate<OrderViewModel>(`${ORDERS_ROUTE}/${encodeURIComponent(orderId)}`, {
+    method: "GET",
+  });
+}
 
 /** Cancelling answers the whole updated order, or copy explaining why not. */
 export type CancelOrderResult = BffResult<OrderViewModel>;

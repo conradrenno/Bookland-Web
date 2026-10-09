@@ -2,6 +2,7 @@
 
 import { zodResolver } from "@hookform/resolvers/zod";
 import { LoaderCircle, ShieldCheck } from "lucide-react";
+import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { useRef, useState } from "react";
 import { useForm, useWatch } from "react-hook-form";
@@ -44,10 +45,17 @@ const EMPTY_FIELDS = {
  * cart are both answered by the cart page, which knows which line broke
  * (`available: false`) and can show it. A message here would describe a problem
  * the customer cannot act on from here (docs/specs/19-checkout.md).
+ *
+ * **Success only means "started".** The checkout is asynchronous: the answer is
+ * a `PENDING` order, and the order page follows it to its outcome. The cart is
+ * not emptied yet — only a `CONFIRMED` order empties it — so the header badge is
+ * left alone here (docs/specs/21, stage 4).
  */
 export function CheckoutForm({ total }: { total: number }) {
   const router = useRouter();
   const [alert, setAlert] = useState<string | null>(null);
+  // An earlier checkout is still running: the alert links to where it can be seen.
+  const [inProgress, setInProgress] = useState(false);
   // Survives the gap between "order created" and "new page painted".
   const [ordered, setOrdered] = useState(false);
   const sending = useRef(false);
@@ -72,6 +80,7 @@ export function CheckoutForm({ total }: { total: number }) {
     if (sending.current) return;
     sending.current = true;
     setAlert(null);
+    setInProgress(false);
 
     // **Only the method travels.** Everything else in `values` is decorative and
     // stops here — see PaymentFields.
@@ -80,8 +89,6 @@ export function CheckoutForm({ total }: { total: number }) {
     if (result.ok) {
       setOrdered(true);
       router.push(`/orders/${result.data.id}`);
-      // The header badge counts a cart that just became an order.
-      router.refresh();
       return;
     }
 
@@ -98,13 +105,18 @@ export function CheckoutForm({ total }: { total: number }) {
       return;
     }
 
-    if (result.code === ErrorCodes.CART_NOT_FOUND) {
+    // `CART_EMPTY` is the current answer; `CART_NOT_FOUND` is what the backend
+    // said before the saga, kept so an older deployment still lands right.
+    if (result.code === ErrorCodes.CART_EMPTY || result.code === ErrorCodes.CART_NOT_FOUND) {
       // Emptied in another tab. The cart's own empty state says it best.
       router.push(CART_PATH);
       router.refresh();
       return;
     }
 
+    // Everything else — a checkout already running, the catalogue or a service
+    // down — is explained in place: the customer can only wait and retry.
+    setInProgress(result.code === ErrorCodes.CHECKOUT_IN_PROGRESS);
     setAlert(result.message);
   }
 
@@ -117,7 +129,17 @@ export function CheckoutForm({ total }: { total: number }) {
       onSubmit={(event) => handleSubmit(onSubmit)(event)}
       className="space-y-6"
     >
-      <FormAlert>{alert}</FormAlert>
+      <FormAlert>
+        {alert}
+        {alert && inProgress && (
+          <>
+            {" "}
+            <Link href="/orders" className="font-medium underline underline-offset-4">
+              Ver meus pedidos
+            </Link>
+          </>
+        )}
+      </FormAlert>
 
       <PaymentMethodPicker registration={register("paymentMethod")} selected={method} />
 
