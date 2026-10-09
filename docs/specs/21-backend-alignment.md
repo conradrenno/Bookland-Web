@@ -1,7 +1,8 @@
 # 21 — Alinhamento com o backend em microsserviços
 
 > Plano para trazer o BFF ao estado atual do Bookland (backend em `5 serviços`, outubro de 2026).
-> Escrita em 2026-10-08 a partir de uma leitura do código dos dois lados. Substitui partes da
+> Escrita em 2026-10-08 a partir de uma leitura do código dos dois lados; etapas 2–5 detalhadas por
+> arquivo em 2026-10-09 (seção "Revisão"). Substitui partes da
 > [02-auth.md](02-auth.md), da [19-checkout.md](19-checkout.md) e da
 > [09-contract-notes.md](09-contract-notes.md) — essas specs descrevem o backend de julho.
 >
@@ -44,7 +45,34 @@
 5. **O Next roda em `http://127.0.0.1:3000`**, não `localhost`: o servidor de autorização recusa
    `localhost` como redirect URI (RFC 8252), e o cookie de `state` precisa voltar no mesmo host.
 
+## Revisão de 2026-10-09 — o que a leitura dos dois códigos acrescentou
+
+O backend não teve commit depois do `3f34b2d`, então a tabela acima continua valendo. Cruzando com
+o código (`ClientBootstrap`, `application.yml` da identidade e do gateway, `BooklandTokenCustomizer`,
+`docs/error-contract.md`, DTOs de pedidos e pagamentos) apareceram pontos que as etapas não cobriam:
+
+| # | Achado | Efeito no BFF |
+|---|---|---|
+| R1 | **`TOKEN_INVALID` não é mais renovável** — o contrato manda encerrar a sessão; só `TOKEN_EXPIRED` vale um refresh | `isRefreshableCode` fica só com `TOKEN_EXPIRED` |
+| R2 | **Token vencido derruba até rota pública** (`GET /books` com token ruim → 401) | Invariante: chamadas de catálogo **nunca** mandam `Authorization` (hoje já não mandam — fixar em teste) |
+| R3 | **O logout via `fetch` não funciona**: o `signOut()` faz `fetch` POST, e um 302 para `:9000` dentro de um `fetch` é cross-origin (a identidade só libera CORS para 8082/8083) | Logout vira **navegação** (`<form method="post">`), e a rota responde **303** |
+| R4 | `/connect/logout` encerra a sessão da identidade, mas **nada indica que revogue o refresh token** | Antes do redirect, `POST /oauth2/revoke` (Basic, `token_type_hint=refresh_token`), em melhor esforço. **Conferir em teste** se é necessário |
+| R5 | **O middleware não serializa o refresh** — chama `refresh()` direto, sem o `renewTokens`. Com access de 24 h isso quase nunca doía; com **15 min** e refresh de **uso único**, toda página cujo access venceu dispara várias renovações paralelas (página + prefetch + chamadas ao BFF) e a segunda leva `invalid_grant` → logout espúrio | O middleware usa o mesmo `renewTokens`, que ganha um **memo curto** (≈30 s) "refresh já trocado → resultado" |
+| R6 | Transições da saga vêm com **`changedBy: null`**; o histórico de um pedido novo é `PENDING → AWAITING_PAYMENT → CONFIRMED` (ou `PENDING → REJECTED`, `AWAITING_PAYMENT → PAYMENT_FAILED`) | `changedBy: UUID \| null`; `status-timeline` revisto |
+| R7 | Pedido `PENDING`/`REJECTED` **não tem pagamento** → `GET /payments/order/{id}` dá 404 `PAYMENT_NOT_FOUND` | A página já degrada (o painel some); o polling precisa reler o pagamento quando o status muda |
+| R8 | `ORDER_CANCELLATION_NOT_ALLOWED` também vale para `PENDING`/`AWAITING_PAYMENT` | Coerente com "cancelável só em `CONFIRMED`" |
+| R9 | `/api/orders/[orderId]` no BFF só tem `DELETE` | O polling da etapa 4 precisa de um `GET` |
+| R10 | `/media/**` é roteado pelo gateway para o catálogo | `MEDIA_BASE_URL` **não muda** (`:8080`) |
+| R11 | Códigos que o BFF ainda não cataloga: `PAYMENT_NOT_FOUND`, `PAYMENT_ACCESS_DENIED`, `INVALID_ORDER_STATUS_TRANSITION`, `NOT_FOUND`, `INVALID_ARGUMENT`, `REVIEW_*`, `WISHLIST_*`, `USER_*`. `PAYMENT_DECLINED` (402) foi aposentado (o BFF não o usava) | Entram no `error-codes.ts` |
+| R12 | O client tem os escopos `openid profile email`; a identidade chama o cookie de sessão de `IDENTITY_SESSION` (cookie não distingue porta) | `scope=openid profile email`; sem colisão com `bl_*` |
+| R13 | O app roda em **Next 16.2** — `middleware.ts` virou `proxy.ts` (runtime Node) | A renomeação entra na etapa 3, que reescreve o arquivo de qualquer jeito |
+| R14 | Com a sessão da identidade viva, refazer o login é **só redirect, sem senha** | Quando o refresh falha numa rota protegida, mandar direto para `/api/auth/login?next=…` em vez de `/login` |
+
 ## Etapas
+
+Ordem: **2 → 3 → 4 → 5**, cada uma num branch próprio, com `pnpm test:run`, `pnpm lint` e
+`pnpm build` verdes no fim. A etapa 2 **acrescenta** tipos sem remover os velhos, para o build não
+quebrar antes da 3.
 
 ### Etapa 1 — backend: registrar o BFF no servidor de autorização ✅
 
@@ -72,78 +100,143 @@ subida; no compose, exige `docker compose down -v` (ou atualizar a linha de `oau
 
 ### Etapa 2 — contrato e configuração do BFF
 
-- [ ] Baixar os três OpenAPI: `http://127.0.0.1:8083/api-docs` (API), `:8082/api-docs` (catálogo),
-      `:9000/api-docs` (identidade). O gateway não roteia `/api-docs`.
-- [ ] `types.ts`: `OrderStatus` + `PENDING`, `REJECTED`; `OrderViewModel` + `statusReason`;
-      `PaymentStatus` + `REFUND_PENDING`, `REFUND_FAILED`; `UpdateOrderStatusRequest` sem `adminId`;
-      `RegisteredUserViewModel` (`id`, `email`, `name`, `role`) no lugar do `TokenViewModel` no
-      registro; tipo da resposta do `/oauth2/token`.
-- [ ] `error-codes.ts`: saem `INVALID_CREDENTIALS`, `INVALID_REFRESH_TOKEN`; entram `CART_EMPTY`,
-      `CHECKOUT_IN_PROGRESS`, `CATALOG_UNAVAILABLE`, `ORDERS_UNAVAILABLE`, `UPSTREAM_TIMEOUT` (504 do
-      gateway), `UPSTREAM_UNAVAILABLE` (502 do gateway). Conferir contra o `docs/error-contract.md` do
-      backend.
-- [ ] `config.ts` / `.env.example`: `BOOKLAND_API_URL` continua `http://localhost:8080` (agora o
-      gateway); entram `BOOKLAND_IDENTITY_URL=http://127.0.0.1:9000`, `BOOKLAND_OAUTH_CLIENT_ID`,
-      `BOOKLAND_OAUTH_CLIENT_SECRET` (só servidor) e `BOOKLAND_BFF_URL=http://127.0.0.1:3000`.
+- [ ] **OpenAPI:** baixar `:8083/api-docs`, `:8082/api-docs` e `:9000/api-docs` (o gateway não roteia
+      `/api-docs`) para `docs/openapi/{api,catalog,identity}.json`; apagar `docs/bookland-openapi.json`.
+      ⚠️ Exige os serviços no ar — **avisar o dono antes**.
+- [ ] `lib/api/types.ts`
+  - `OrderStatus` + `PENDING`, `REJECTED`; `OrderViewModel` + `statusReason: string | null`.
+  - `StatusTransitionViewModel.changedBy: UUID | null` (R6).
+  - `PaymentStatus` + `REFUND_PENDING`, `REFUND_FAILED`.
+  - `CartViewModel.id` e `updatedAt`: `| null`.
+  - `UpdateOrderStatusRequest` sem `adminId`.
+  - Novos: `RegisteredUserViewModel` (`id`, `email`, `name`, `role`) e `OAuthTokenResponse`
+    (`access_token`, `refresh_token`, `id_token`, `token_type`, `expires_in`, `scope`).
+  - `TokenViewModel`, `LoginRequest`, `RefreshTokenRequest` e `LogoutRequest` **ficam até a etapa 3**.
+- [ ] `lib/api/error-codes.ts`: entram `CART_EMPTY`, `CHECKOUT_IN_PROGRESS`, `CATALOG_UNAVAILABLE`,
+      `ORDERS_UNAVAILABLE`, `UPSTREAM_TIMEOUT`, `UPSTREAM_UNAVAILABLE` e os de R11; `REFRESHABLE_CODES`
+      só com `TOKEN_EXPIRED` (R1). `INVALID_CREDENTIALS`/`INVALID_REFRESH_TOKEN` saem na etapa 3.
+- [ ] `lib/api/error-messages.ts`: mensagens em português para os novos códigos.
+- [ ] `lib/config.ts` + `.env.example`: `IDENTITY_BASE_URL` (`BOOKLAND_IDENTITY_URL`, default
+      `http://127.0.0.1:9000`), `OAUTH_CLIENT_ID` (`BOOKLAND_OAUTH_CLIENT_ID`, default `bookland-web`),
+      `OAUTH_CLIENT_SECRET` (`BOOKLAND_OAUTH_CLIENT_SECRET`, só servidor, sem default fora do dev),
+      `BFF_BASE_URL` (`BOOKLAND_BFF_URL`, default `http://127.0.0.1:3000`); `COOKIE` ganha `id`
+      (`bl_id`) e `oauth` (`bl_oauth`). `BOOKLAND_API_URL` e `NEXT_PUBLIC_BOOKLAND_MEDIA_URL` continuam
+      no `:8080` (R10).
+- [ ] `package.json`: `"dev": "next dev -H 127.0.0.1"` (decisão 5).
+- [ ] `lib/api/client.ts`: opção `baseUrl` no `apiFetch` (o registro vai à identidade, não ao gateway),
+      em vez de um segundo cliente.
 
 ### Etapa 3 — autenticação OAuth2 (a maior)
 
 ```
-GET  /api/auth/login?next=/x   → cria state + code_verifier (cookie curto, httpOnly)
+GET  /api/auth/login?next=/x   → se o host não for o de BFF_BASE_URL, 307 para o mesmo caminho lá
+                                 (senão o cookie bl_oauth nasce em localhost e o callback não o vê)
+                                 → gera state + code_verifier; grava bl_oauth = {state, verifier, next}
+                                   (httpOnly, SameSite=Lax, Path=/api/auth/callback, Max-Age=600)
                                  → 302 para {IDENTITY}/oauth2/authorize
-                                   (response_type=code, client_id, redirect_uri, scope=openid profile,
-                                    state, code_challenge, code_challenge_method=S256)
-GET  /api/auth/callback        → confere state; POST {IDENTITY}/oauth2/token
-                                   (Basic client:secret; grant_type=authorization_code, code,
-                                    redirect_uri, code_verifier)
-                                 → grava bl_access, bl_refresh, bl_id; apaga o cookie do state
-                                 → 302 para next (sanitizado, como hoje)
-POST /api/auth/logout          → apaga os cookies
-                                 → 302 para {IDENTITY}/connect/logout?id_token_hint=…&post_logout_redirect_uri=…
-POST /api/auth/register        → POST {IDENTITY}/api/v1/auth/register → 201
-                                 → o front segue para /api/auth/login?next=…
+                                   (response_type=code, client_id, redirect_uri,
+                                    scope=openid profile email, state,
+                                    code_challenge, code_challenge_method=S256)
+GET  /api/auth/callback        → ?error=… ou state ≠ cookie → 302 para /login?error=…
+                                 → POST {IDENTITY}/oauth2/token (Basic; grant_type=authorization_code,
+                                   code, redirect_uri, code_verifier)
+                                 → grava bl_access, bl_refresh, bl_id; apaga bl_oauth
+                                 → 302 para next (sanitizado por next-path.ts)
+POST /api/auth/logout          → POST {IDENTITY}/oauth2/revoke (refresh, melhor esforço — R4)
+                                 → apaga os cookies
+                                 → 303 para {IDENTITY}/connect/logout?id_token_hint=…
+                                   &post_logout_redirect_uri={BFF}/   (na query string: num GET o
+                                   servidor só lê dela); sem bl_id, 303 direto para /
+POST /api/auth/register        → POST {IDENTITY}/api/v1/auth/register → 201 RegisteredUserViewModel
+                                 → o formulário faz window.location.assign(/api/auth/login?next=…)
 ```
 
-- [ ] `lib/auth/oauth.ts`: PKCE (`crypto.subtle`, funciona no Edge e no Node), montagem das URLs,
-      troca de código, refresh. Funções puras + `fetch`, testáveis com MSW.
-- [ ] Refresh no middleware: `POST /oauth2/token` com `grant_type=refresh_token` e Basic. Continua de
-      **uso único** → a serialização de `refresh.ts` continua. Falha vem como JSON OAuth2
-      (`{"error":"invalid_grant"}`), **não** problem+json — tratar como "sessão encerrada".
-- [ ] Cookies: `Max-Age` do access a partir de `expires_in`; do refresh, 7 dias (o token endpoint não
-      informa a validade do refresh). `bl_id` só serve de `id_token_hint` no logout.
-- [ ] `session.ts`: aceitar a claim `name` (o header pode cumprimentar pelo nome). Continua sem
-      verificar assinatura — o upstream é a autoridade.
-- [ ] Páginas: `/login` vira entrada para o fluxo; `/register` mantém o formulário (RHF + zod) e, no
-      sucesso, manda para o login.
+Por arquivo:
+
+- [ ] **Novo `lib/auth/oauth.ts`** — funções puras + `fetch` direto (o token endpoint recebe
+      `application/x-www-form-urlencoded`, não JSON, então não passa pelo `apiFetch`):
+      `createPkcePair()` (`crypto.getRandomValues` + `crypto.subtle.digest`, base64url),
+      `buildAuthorizeUrl()`, `exchangeCode()`, `refreshTokens()`, `revokeRefreshToken()`,
+      `buildEndSessionUrl()`. Um erro OAuth (`{"error":"invalid_grant"}`) vira `ApiError` 401 com o
+      código `SESSION_ENDED` (só do BFF, na seção "client-side only" do `error-codes.ts`).
+- [ ] `lib/auth/cookies.ts` — `writeTokens(OAuthTokenResponse)`: access com `Max-Age = expires_in`,
+      refresh e id com 7 dias (o endpoint não informa a validade do refresh); `clearTokens` apaga os
+      três. Funções para ler, gravar e apagar `bl_oauth`. As opções de cookie viram uma função só,
+      usada também pelo proxy (hoje estão duplicadas em `middleware.ts`).
+- [ ] `lib/auth/refresh.ts` — passa a chamar `oauth.refreshTokens` e ganha o memo de R5
+      (`Map<refresh usado, { resultado, expiraEm }>`, ≈30 s). Continua sem tocar em cookies.
+- [ ] `middleware.ts` → **`proxy.ts`** (export `proxy`, R13) — usa `renewTokens` (R5); grava os três
+      cookies; quando não há sessão recuperável numa rota protegida, redireciona para
+      `/api/auth/login?next=…` (R14). O matcher continua pulando `api/auth`.
+- [ ] `lib/auth/session.ts` — claim `name?: string` → `SessionUser.name`; `aud` ignorado. Continua
+      sem verificar assinatura.
+- [ ] Rotas: **novas** `api/auth/callback/route.ts` e `api/auth/login/route.ts` (agora `GET`);
+      **reescritas** `logout` e `register`; **apagada** `api/auth/refresh/route.ts` (nenhum código do
+      cliente a chama, e a renovação vive no proxy — confirmar com grep antes de apagar).
+- [ ] `lib/api/auth.ts` — fica só `register()` (contra `IDENTITY_BASE_URL`, devolvendo
+      `RegisteredUserViewModel`). Saem `login`, `refresh` e `logout`.
+- [ ] `lib/api/auth-client.ts` — saem `signIn` e `signOut` (R3); `signUp` fica; ganha
+      `loginHref(next)`.
+- [ ] Páginas e componentes
+  - `(auth)/login/page.tsx`: sem `?error`, `redirect()` imediato para `/api/auth/login?next=…`;
+    com `?error`, mostra o motivo e um botão "Tentar de novo". `login-form.tsx` (e o teste) é apagado.
+  - `register-form.tsx`: no 201, `window.location.assign(loginHref(next))` — navegação completa, não
+    `router.push` (o destino final é outra origem). `EMAIL_ALREADY_EXISTS` e `VALIDATION_ERROR`
+    seguem como hoje.
+  - `account-menu.tsx`: "Sair" vira `<form method="post" action="/api/auth/logout">`; saudação pelo
+    `name`, com o e-mail de fallback. Os links "Entrar" do header apontam para `loginHref`.
+- [ ] `types.ts`/`error-codes.ts`/`error-messages.ts`: remover o que ficou para trás (`TokenViewModel`,
+      `LoginRequest`, `RefreshTokenRequest`, `LogoutRequest`, `INVALID_CREDENTIALS`,
+      `INVALID_REFRESH_TOKEN`).
 - [ ] Conta (`/users/{id}`), quando entrar, vai **direto no `:9000`** — não passa pelo gateway.
-- [ ] Testes: unit do PKCE e das URLs; MSW do callback (state errado, código inválido, sucesso), do
-      refresh (sucesso, `invalid_grant`) e do logout; smoke contra a stack rodando fazendo o fluxo por
-      código (GET `/login` da identidade, POST com CSRF, `/oauth2/authorize`, callback).
+- [ ] Testes
+  - unit: PKCE (vetor do RFC 7636, apêndice B), URLs de authorize e end-session, sanitização do
+    `next` no callback, opções de cookie, memo do `renewTokens` (duas chamadas concorrentes = uma ao
+    upstream; uma chamada tardia com o refresh velho recebe o mesmo par).
+  - MSW: callback (state errado, `error=access_denied`, código inválido, sucesso), refresh (sucesso,
+    `invalid_grant`), logout (com e sem `bl_id`; revoke falhando não impede o logout), register
+    (201, 409).
+  - smoke (`live-contract.smoke.test.ts`): o fluxo por código — GET `/login` da identidade, POST com
+    CSRF e cookie `IDENTITY_SESSION`, `/oauth2/authorize`, callback do BFF. **Avisar o dono antes.**
 
 ### Etapa 4 — checkout assíncrono
 
-- [ ] `POST /api/cart/checkout`: repassa o **202** com o pedido `PENDING`; o formulário navega para
-      `/orders/{id}`.
-- [ ] `/orders/[orderId]`: componente cliente que consulta `GET /api/orders/{id}` a cada ~1,5 s
-      enquanto o status for `PENDING`/`AWAITING_PAYMENT`, com teto (ex.: 60 s) e mensagem de "seu
-      pagamento está demorando, avisaremos por e-mail" — com o gateway de pagamento fora, o pedido
-      fica em `AWAITING_PAYMENT` por bastante tempo.
-- [ ] `REJECTED` e `PAYMENT_FAILED`: mostrar o `statusReason` e um "voltar ao carrinho" (o carrinho
-      continua lá).
-- [ ] Erros do checkout: `CART_EMPTY` (409), `CHECKOUT_IN_PROGRESS` (409 — já existe um pedido em
-      andamento), `CATALOG_UNAVAILABLE` (503), `UPSTREAM_TIMEOUT`/`UPSTREAM_UNAVAILABLE`.
-- [ ] `lib/orders/status.ts`: apresentação de `PENDING` e `REJECTED`; **cancelável só em
-      `CONFIRMED`**.
-- [ ] Contador do carrinho no header: o carrinho só zera no `CONFIRMED`.
+- [ ] `lib/api/orders.ts` + `api/cart/checkout/route.ts`: repassar o **202** com o pedido `PENDING`;
+      as docstrings deixam de falar em "já `CONFIRMED` e pago".
+- [ ] **`GET` em `api/orders/[orderId]/route.ts`** (R9) — devolve `{ order, payment | null }`, a mesma
+      forma que a página monta; 403 vira 404, como na página.
+- [ ] **Novo `components/orders/order-progress.tsx`** (cliente): montado só quando o status é
+      `PENDING`/`AWAITING_PAYMENT`; consulta o `GET` acima a cada 1,5 s, com teto de 60 s; quando o
+      status muda, `router.refresh()` (re-renderiza a página inteira — pagamento e badge do carrinho
+      junto, R7). Passado o teto: "seu pagamento está demorando, avisaremos por e-mail". Para ao
+      desmontar e enquanto a aba está oculta (`visibilitychange`).
+- [ ] `orders/[orderId]/page.tsx`: banner de desfecho — `REJECTED`/`PAYMENT_FAILED` mostram o
+      `statusReason` e "Voltar ao carrinho" (o carrinho continua lá); `CONFIRMED` agradece.
+- [ ] `checkout-form.tsx`: `CART_NOT_FOUND` → **`CART_EMPTY`**; `CHECKOUT_IN_PROGRESS` → alerta com
+      link para `/orders` (o erro não traz o id do pedido); `CATALOG_UNAVAILABLE`, `UPSTREAM_TIMEOUT`
+      e `UPSTREAM_UNAVAILABLE` → alerta "tente de novo". No sucesso, o `router.refresh()` deixa de ser
+      para "zerar o badge" — o carrinho só esvazia no `CONFIRMED`, e quem atualiza é o `order-progress`.
+- [ ] `lib/orders/status.ts`: `PENDING` "Processando", `REJECTED` "Recusado"; **cancelável só em
+      `CONFIRMED`** (`AWAITING_PAYMENT` deixa de ser). Atualizar os comentários.
+- [ ] `status-timeline.tsx`: o histórico novo (R6) e `changedBy` nulo.
+- [ ] `lib/payments/labels.ts`: `REFUND_PENDING` "Estorno em andamento", `REFUND_FAILED`
+      "Estorno com problema".
+- [ ] `cancel-order-button.tsx`: o diálogo continua certo (cancelar `CONFIRMED` estorna), mas o
+      estorno agora é assíncrono — dizer "o estorno será processado".
+- [ ] Testes: `status.test.ts`, `status-timeline.test.tsx`, `checkout-form.test.tsx` (códigos novos),
+      `order-progress` com timers falsos (para no desfecho, para no teto), a rota `GET` com MSW.
 
 ### Etapa 5 — ajustes menores e documentação
 
-- [ ] `GET /cart` com `id: null` para cliente novo (tratar como vazio, sem erro).
-- [ ] Itens "Unavailable" no carrinho e na wishlist quando o catálogo está fora.
-- [ ] Reviews: a lista já vem da mais nova para a mais antiga; `DUPLICATE_REVIEW` também em corrida.
-- [ ] Remover qualquer menção à rota de estorno avulso.
-- [ ] Atualizar `CONTEXT.md`, [02](02-auth.md), [09](09-contract-notes.md) e [19](19-checkout.md).
-- [ ] Conferir se o Next 16 avisa a depreciação de `middleware.ts` em favor de `proxy.ts`.
+- [ ] `GET /cart` com `id: null`: conferir `cart.ts`, `current-cart.ts` e a página — tratar como vazio.
+- [ ] Itens "Unavailable" (catálogo fora): `cart-line.tsx` já trata `available: false`; conferir o
+      título que chega como placeholder e o checkout bloqueando "Pagar" com item indisponível.
+- [ ] Reviews: a lista já vem da mais nova para a mais antiga (tirar qualquer ordenação no BFF);
+      `DUPLICATE_REVIEW` também em corrida.
+- [ ] Remover as menções à rota de estorno avulso (`client.ts`, `payments.ts`).
+- [ ] Teste do invariante R2 (catálogo sem `Authorization`).
+- [ ] Atualizar o `CONTEXT.md` (a seção "API Bookland — referência" inteira), [02](02-auth.md),
+      [09](09-contract-notes.md), [19](19-checkout.md) e [20](20-orders-history.md).
 
 ## Fora desta spec
 
