@@ -133,11 +133,12 @@ No compose, o segredo do client é o `OAUTH2_CLIENT_SECRET` do `.env` do backend
 - [x] `lib/api/client.ts`: opção `baseUrl` no `apiFetch` (o registro vai à identidade, não ao gateway),
       em vez de um segundo cliente.
 
-### Etapa 3 — autenticação OAuth2 (a maior) ✅ (falta conferir ao vivo)
+### Etapa 3 — autenticação OAuth2 (a maior) ✅
 
-**Feita em 2026-10-09.** Unitários e de rota verdes; o fluxo de verdade contra a identidade ainda
-**não rodou**: a sondagem por `curl` (que cadastra um usuário e revoga tokens) e o `pnpm test:smoke`
-esperam o OK do dono. Diferenças em relação ao plano abaixo:
+**Feita em 2026-10-09** e **conferida ao vivo** no mesmo dia: o `pnpm test:smoke` (43 verdes,
+contra a stack do compose) faz o fluxo por código de verdade e confirma que o refresh rotaciona,
+que o refresh gasto é recusado e que um refresh revogado também é. Diferenças em relação ao plano
+abaixo:
 
 - **Toda entrada de login é navegação completa**, não só o logout: `<a href>` ou `navigateTo`
   (`lib/navigation.ts`, que existe para o teste poder trocá-la) para `loginHref(next)`
@@ -223,9 +224,11 @@ Por arquivo:
   - smoke (`live-contract.smoke.test.ts`): o fluxo por código — GET `/login` da identidade, POST com
     CSRF e cookie `IDENTITY_SESSION`, `/oauth2/authorize`, callback do BFF. **Avisar o dono antes.**
 
-### Etapa 4 — checkout assíncrono ✅ (falta conferir ao vivo)
+### Etapa 4 — checkout assíncrono ✅
 
-**Feita em 2026-10-09.** Diferenças em relação ao plano abaixo:
+**Feita em 2026-10-09** e conferida ao vivo pelo smoke: 202 `PENDING` → `CONFIRMED` em ~2 s,
+transições da saga com `changedBy: null`, carrinho vazio só depois do `CONFIRMED`, estorno
+assíncrono até `REFUNDED`. Diferenças em relação ao plano abaixo:
 
 - O `GET /api/orders/{id}` devolve **só o pedido**: quando o status muda, o `router.refresh()`
   re-renderiza a página no servidor, e é ela que relê o pagamento.

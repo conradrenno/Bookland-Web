@@ -10,9 +10,10 @@ notificação), o login virou **OAuth2 authorization code + PKCE** e o checkout 
 assíncrona**. O BFF foi **alinhado** a isso em 2026-10-09 — plano e registro em
 [`docs/specs/21-backend-alignment.md`](docs/specs/21-backend-alignment.md), etapas 1 a 5 feitas.
 
-**O que ainda não rodou ao vivo:** o login pela identidade e o checkout assíncrono foram testados
-com MSW, mas **nem a sondagem nem o `pnpm test:smoke` rodaram** contra a stack — esperam o OK do
-dono (eles cadastram usuários e compram de verdade).
+**Conferido ao vivo (2026-10-09):** `pnpm test:smoke` com **43 verdes** contra a stack do compose —
+login OAuth2 por código, rotação e revogação do refresh, checkout assíncrono e estorno. Falta só
+uma passada manual no navegador (cadastro → login → compra → sair). O smoke deixa clientes
+`smoke-…@example.com` e pedidos no Postgres a cada execução.
 
 **Para rodar:** `pnpm dev` (agora sobe em **`http://127.0.0.1:3000`** — abra por esse endereço, não
 por `localhost`) com `.env.local` contendo `BOOKLAND_OAUTH_CLIENT_SECRET` (ver `.env.example`).
@@ -154,8 +155,8 @@ Fase 2: wishlist, área de conta, painel admin.
       → [`21-backend-alignment.md`](docs/specs/21-backend-alignment.md)
 - [x] **Alinhamento, etapas 2–5 (2026-10-09):** contrato em 3 OpenAPI, login OAuth2 + PKCE pela
       identidade, `proxy.ts`, checkout assíncrono com `OrderOutcome`. **497 unit verdes.**
-- [ ] **Conferir ao vivo** o login e o checkout novos (`pnpm test:smoke` e uma passada no
-      navegador) — esperando o OK do dono
+- [x] **Smoke ao vivo (2026-10-09):** 43 verdes contra a stack do compose
+- [ ] Uma passada manual no navegador pelo fluxo novo
 - [ ] **Próximo:** reviews na página do livro ([04](docs/specs/04-reviews.md))
 
 ## 🚦 Onde paramos — leia isto primeiro (2026-10-09)
@@ -163,8 +164,8 @@ Fase 2: wishlist, área de conta, painel admin.
 **O MVP de compra está fechado ponta a ponta e alinhado ao backend em microsserviços.** As seções
 de etapa abaixo são o histórico de agosto; o que mudou depois está na spec 21.
 
-Comandos: `pnpm test:run` (**497** unit), `pnpm test:smoke` (contra a stack **no ar**, cadastra os
-próprios clientes), `pnpm typecheck`, `pnpm lint`, `pnpm build` — unit, lint e build limpos.
+Comandos: `pnpm test:run` (**497** unit), `pnpm test:smoke` (**43** contra a stack **no ar**,
+cadastra os próprios clientes), `pnpm typecheck`, `pnpm lint`, `pnpm build` — todos limpos.
 
 > ⚠️ Os números de teste citados nas etapas antigas acima estão **desatualizados**
 > por construção — cada etapa registrou o seu. O valor corrente é o desta seção.
